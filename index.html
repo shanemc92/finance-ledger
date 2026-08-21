@@ -1,0 +1,1898 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ledger</title>
+<meta name="color-scheme" content="dark light">
+<style>
+:root{
+  --bg:#101319; --surface:#171b23; --surface2:#1d222c; --line:#282f3b;
+  --text:#e3e8f0; --muted:#8a94a5; --accent:#4fb3a3; --accent-dim:#2f6b62;
+  --good:#6faf6c; --warn:#d6a544; --bad:#d0625d; --shadow:0 1px 2px rgba(0,0,0,.4);
+}
+[data-theme="light"]{
+  --bg:#f4f6f8; --surface:#ffffff; --surface2:#f0f2f5; --line:#dde2e9;
+  --text:#161a21; --muted:#68727f; --accent:#2b8579; --accent-dim:#a8d5cd;
+  --good:#3f7f3d; --warn:#a97b16; --bad:#b8433d; --shadow:0 1px 2px rgba(20,25,35,.08);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--text);
+  font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  -webkit-text-size-adjust:100%;
+}
+.num,input[type=number],td.n,th.n{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+h1,h2,h3{font-weight:600;margin:0}
+a{color:var(--accent)}
+hr{border:0;border-top:1px solid var(--line);margin:18px 0}
+
+/* top bar */
+header{
+  position:sticky;top:0;z-index:30;background:var(--surface);border-bottom:1px solid var(--line);
+  display:flex;align-items:center;gap:10px;padding:8px 14px;flex-wrap:wrap;
+}
+.brand{font-weight:700;letter-spacing:.14em;font-size:13px;text-transform:uppercase}
+.brand span{color:var(--accent)}
+header .grow{flex:1}
+.status{font-size:12px;color:var(--muted)}
+
+nav{display:flex;gap:2px;overflow-x:auto;background:var(--surface);border-bottom:1px solid var(--line);padding:0 8px;position:sticky;top:47px;z-index:29}
+nav button{
+  background:none;border:0;border-bottom:2px solid transparent;color:var(--muted);
+  padding:10px 12px;font-size:13px;cursor:pointer;white-space:nowrap;font-weight:500;
+}
+nav button:hover{color:var(--text)}
+nav button.active{color:var(--text);border-bottom-color:var(--accent)}
+
+main{padding:16px;max-width:1400px;margin:0 auto}
+section{display:none}
+section.active{display:block}
+
+/* controls */
+button,select,input,textarea{font-family:inherit;font-size:13px;color:var(--text)}
+.btn{
+  background:var(--surface2);border:1px solid var(--line);border-radius:6px;
+  padding:6px 11px;cursor:pointer;
+}
+.btn:hover{border-color:var(--accent-dim)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#08110f;font-weight:600}
+[data-theme="light"] .btn.primary{color:#fff}
+.btn.sm{padding:3px 8px;font-size:12px}
+.btn.danger:hover{border-color:var(--bad);color:var(--bad)}
+input,select,textarea{
+  background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:5px 7px;width:100%;
+}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+input[type=checkbox]{width:auto}
+label.f{display:block;margin-bottom:9px}
+label.f>span{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:3px}
+
+/* layout blocks */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:14px;margin-bottom:14px;box-shadow:var(--shadow)}
+.card>h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:12px}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+.grid{display:grid;gap:12px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.g3{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.g4{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
+.spacer{flex:1}
+
+/* KPI */
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:12px 14px}
+.kpi .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.kpi .val{font-size:22px;font-weight:600;margin-top:4px;font-family:ui-monospace,Menlo,Consolas,monospace}
+.kpi .sub{font-size:12px;color:var(--muted);margin-top:2px}
+.pos{color:var(--good)} .neg{color:var(--bad)} .amb{color:var(--warn)} .mut{color:var(--muted)}
+
+/* tables */
+.tw{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{
+  text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);
+  font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap;
+}
+td{padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+th.n,td.n{text-align:right}
+tbody tr:hover{background:var(--surface2)}
+tfoot td{font-weight:600;border-top:2px solid var(--line);border-bottom:0}
+table input,table select{padding:3px 5px;min-width:70px}
+td.act{width:1%;white-space:nowrap}
+.empty{color:var(--muted);text-align:center;padding:22px;font-size:13px}
+
+/* signature: budget bar */
+.bar{position:relative;height:16px;background:var(--surface2);border-radius:3px;min-width:110px;overflow:hidden}
+.bar i{position:absolute;left:0;top:0;bottom:0;background:var(--accent-dim);border-radius:3px}
+.bar i.over{background:var(--bad)}
+.bar i.under{background:var(--accent-dim)}
+.bar b{position:absolute;left:0;top:0;bottom:0;width:1px;background:var(--text);opacity:.55}
+.bar em{position:absolute;right:4px;top:0;font-style:normal;font-size:10.5px;line-height:16px;color:var(--text);font-family:ui-monospace,Menlo,monospace}
+
+.pill{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;border:1px solid var(--line);background:var(--surface2);color:var(--muted)}
+.pill.on{border-color:var(--accent-dim);color:var(--accent)}
+.note{font-size:12px;color:var(--muted);margin-top:8px}
+canvas{display:block;max-width:100%}
+.chartbox{height:260px;position:relative;overflow:hidden}
+.chartbox.auto{height:auto}
+.tip{
+  position:absolute;pointer-events:none;z-index:5;opacity:0;transition:opacity .1s;
+  background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 9px;
+  font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;white-space:nowrap;
+  box-shadow:0 4px 14px rgba(0,0,0,.3);color:var(--text);
+}
+.tip.on{opacity:1}
+.tip b{display:block;font-weight:600;margin-bottom:2px;color:var(--muted);font-size:11px}
+.tip i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:6px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px}
+.toast{
+  position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--surface);
+  border:1px solid var(--accent-dim);border-radius:8px;padding:9px 16px;z-index:99;box-shadow:0 6px 22px rgba(0,0,0,.35);
+  opacity:0;pointer-events:none;transition:opacity .18s
+}
+.toast.show{opacity:1}
+details summary{cursor:pointer;color:var(--muted);font-size:12px;padding:4px 0}
+@media (max-width:640px){
+  main{padding:10px}
+  .card{padding:11px}
+  nav{top:45px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">Led<span>ger</span></div>
+  <select id="yearSel" style="width:auto"></select>
+  <button class="btn sm" id="newYear">+ Year</button>
+  <div class="grow"></div>
+  <span class="status" id="status"></span>
+  <button class="btn sm" id="themeBtn">Light</button>
+</header>
+<nav id="tabs"></nav>
+<main>
+  <section id="tab-dashboard"></section>
+  <section id="tab-budget"></section>
+  <section id="tab-tax"></section>
+  <section id="tab-loans"></section>
+  <section id="tab-bank"></section>
+  <section id="tab-savings"></section>
+  <section id="tab-history"></section>
+  <section id="tab-data"></section>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+/* ---------------------------------------------------------------
+   Ledger - single file personal finance workbook
+   All data stays in this browser (localStorage). No network calls.
+----------------------------------------------------------------*/
+"use strict";
+
+const $ = (s,r)=> (r||document).querySelector(s);
+const $$ = (s,r)=> Array.from((r||document).querySelectorAll(s));
+const uid = ()=> Math.random().toString(36).slice(2,9);
+const clamp = (n,a,b)=> Math.min(b,Math.max(a,n));
+const num = v => { const n = parseFloat(String(v??'').replace(/[^0-9.\-]/g,'')); return isFinite(n)?n:0; };
+const round2 = n => Math.round((n+Number.EPSILON)*100)/100;
+
+const FREQ = {Weekly:52, Fortnightly:26, Monthly:12, Quarterly:4, Annual:1};
+
+let CUR = '€';
+const fmt = (n,d)=>{
+  if(!isFinite(n)) n=0;
+  const s = Math.abs(n).toLocaleString('en-IE',{minimumFractionDigits:d??2,maximumFractionDigits:d??2});
+  return (n<0?'-':'')+CUR+s;
+};
+const fmt0 = n => fmt(n,0);
+const pct = n => (isFinite(n)?n:0).toLocaleString('en-IE',{minimumFractionDigits:1,maximumFractionDigits:1})+'%';
+const iso = d => { const x = (d instanceof Date)?d:new Date(d); return isNaN(x)?'':x.toISOString().slice(0,10); };
+const parseDate = s => { const d = new Date(s); return isNaN(d)?null:d; };
+const addMonths = (d,n)=>{ const x=new Date(d.getTime()); const day=x.getDate(); x.setDate(1); x.setMonth(x.getMonth()+n);
+  x.setDate(Math.min(day,new Date(x.getFullYear(),x.getMonth()+1,0).getDate())); return x; };
+const addDays = (d,n)=>{ const x=new Date(d.getTime()); x.setDate(x.getDate()+n); return x; };
+const daysBetween = (a,b)=> Math.round((b-a)/86400000);
+const monthKey = d => iso(d).slice(0,7);
+
+/* ---------- Irish tax year presets (Revenue / Budget figures) ---------- */
+const TAX_PRESETS = {
+  2024:{ srcopSingle:42000, srcopMax:51000, lowRate:.20, highRate:.40,
+    prsiRate1:.04, prsiRate2:.0410, prsiChangeMonth:10,
+    uscExempt:13000, uscBands:[{to:12012,rate:.005},{to:25760,rate:.02},{to:70044,rate:.03},{to:1e12,rate:.08}],
+    personalCredit:1875, employeeCredit:1875 },
+  2025:{ srcopSingle:44000, srcopMax:53000, lowRate:.20, highRate:.40,
+    prsiRate1:.0410, prsiRate2:.0420, prsiChangeMonth:10,
+    uscExempt:13000, uscBands:[{to:12012,rate:.005},{to:27382,rate:.02},{to:70044,rate:.03},{to:1e12,rate:.08}],
+    personalCredit:2000, employeeCredit:2000 },
+  2026:{ srcopSingle:44000, srcopMax:53000, lowRate:.20, highRate:.40,
+    prsiRate1:.0420, prsiRate2:.0435, prsiChangeMonth:10,
+    uscExempt:13000, uscBands:[{to:12012,rate:.005},{to:28700,rate:.02},{to:70044,rate:.03},{to:1e12,rate:.08}],
+    personalCredit:2000, employeeCredit:2000 }
+};
+const presetFor = y => JSON.parse(JSON.stringify(TAX_PRESETS[y] || TAX_PRESETS[Math.max(...Object.keys(TAX_PRESETS).map(Number))]));
+
+/* ---------- data model ---------- */
+function blankYear(year, seed){
+  const p = presetFor(year);
+  return {
+    year: year,
+    currency: '€',
+    taxBands: p,
+    people: seed ? seed.people : [
+      {id:uid(), name:'Person 1', gross:0, pensionPct:0, avcMonthly:0, bikMonthly:0,
+       srcop:p.srcopSingle, credits:[{name:'Personal Tax Credit',amount:p.personalCredit},{name:'Employee Tax Credit',amount:p.employeeCredit}],
+       bonus:0}
+    ],
+    splitMode:'income',            // 'income' = pro-rata on net pay, 'manual'
+    splitManual:{},                // personId -> share 0-1
+    bills: seed ? seed.bills : [],
+    loans: seed ? seed.loans : [],
+    savings: seed ? seed.savings : {startDate: year+'-01-01', months:24, growthPct:0, accounts:[]},
+    rules: seed ? seed.rules : [],
+    txns: [],
+    history: seed ? seed.history : [],
+    analysis: {from: year+'-01-01', to: (year+1)+'-01-01'}
+  };
+}
+
+const KEY = 'ledger.v1';
+let DB = null, Y = null;
+
+function load(){
+  try{ DB = JSON.parse(localStorage.getItem(KEY)); }catch(e){ DB = null; }
+  if(!DB || !DB.years || !Object.keys(DB.years).length){
+    const y = new Date().getFullYear();
+    DB = {version:1, active:String(y), theme:'dark', years:{}};
+    DB.years[String(y)] = blankYear(y);
+  }
+  if(!DB.years[DB.active]) DB.active = Object.keys(DB.years).sort()[0];
+  Y = DB.years[DB.active];
+  CUR = Y.currency || '€';
+}
+let saveTimer=null;
+function save(quiet){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(()=>{
+    try{
+      localStorage.setItem(KEY, JSON.stringify(DB));
+      if(!quiet) setStatus('Saved '+new Date().toLocaleTimeString('en-IE',{hour:'2-digit',minute:'2-digit'}));
+    }catch(e){ setStatus('Storage full - export a backup'); }
+  },200);
+}
+function setStatus(t){ $('#status').textContent = t; }
+let toastTimer=null;
+function toast(msg){
+  const el=$('#toast'); el.textContent=msg; el.classList.add('show');
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>el.classList.remove('show'),2200);
+}
+
+/* ---------- tax engine ---------- */
+function uscFor(income, bands, exempt){
+  if(income <= exempt) return 0;
+  let prev=0, total=0;
+  for(const b of bands){
+    if(income > prev){ total += (Math.min(income,b.to)-prev)*b.rate; prev=b.to; }
+  }
+  return total;
+}
+function calcTax(person, bands){
+  const p = person, b = bands;
+  const gross = num(p.gross);
+  const bik = num(p.bikMonthly)*12;
+  const pension = gross*(num(p.pensionPct)/100);
+  const avc = num(p.avcMonthly)*12;
+  const grossPay = gross + bik;                       // incl. notional pay
+  const taxable = grossPay - pension - avc;
+  const srcop = num(p.srcop)||b.srcopSingle;
+  const tax20 = Math.min(taxable, srcop) * b.lowRate;
+  const tax40 = Math.max(taxable - srcop, 0) * b.highRate;
+  const liability = Math.max(tax20,0) + tax40;
+  const credits = (p.credits||[]).reduce((s,c)=>s+num(c.amount),0);
+  const paye = Math.max(liability - credits, 0);
+  const m1 = clamp(num(b.prsiChangeMonth)-1, 0, 12), m2 = 12-m1;
+  const prsi = (grossPay*b.prsiRate1/12)*m1 + (grossPay*b.prsiRate2/12)*m2;
+  const usc = uscFor(grossPay, b.uscBands, b.uscExempt);
+  const deductions = paye + prsi + usc + pension + avc;
+  const net = gross - deductions;
+  // bonus taxed at the margin
+  const bonus = num(p.bonus);
+  const bTax = bonus * (taxable>=srcop ? b.highRate : b.lowRate);
+  const bPrsi = bonus * b.prsiRate2;
+  const bUsc = uscFor(grossPay+bonus, b.uscBands, b.uscExempt) - usc;
+  const bonusNet = bonus - bTax - bPrsi - bUsc;
+  return {gross, bik, pension, avc, grossPay, taxable, tax20, tax40, liability, credits, paye,
+          prsi, usc, deductions, net, netMonthly:net/12,
+          bonus, bTax, bPrsi, bUsc, bonusNet,
+          effective: grossPay? (paye+prsi+usc)/grossPay*100 : 0};
+}
+
+/* ---------- bills / budget ---------- */
+const annualOf = b => num(b.amount) * (FREQ[b.freq]||12);
+function billTotals(){
+  const t = {annual:0, monthly:0, weekly:0, byHolder:{}, joint:0};
+  for(const b of Y.bills){
+    const a = annualOf(b);
+    t.annual += a;
+    const h = b.holder||'Joint';
+    t.byHolder[h] = (t.byHolder[h]||0) + a;
+    if(h==='Joint') t.joint += a;
+  }
+  t.monthly = t.annual/12; t.weekly = t.annual/52;
+  return t;
+}
+function nextDueFrom(b){
+  if(!b.nextDue) return null;
+  const d = parseDate(b.nextDue); if(!d) return null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const step = b.freq;
+  let x = new Date(d.getTime()), guard=0;
+  while(x < today && guard++ < 500){
+    if(step==='Weekly') x = addDays(x,7);
+    else if(step==='Fortnightly') x = addDays(x,14);
+    else if(step==='Monthly') x = addMonths(x,1);
+    else if(step==='Quarterly') x = addMonths(x,3);
+    else x = addMonths(x,12);
+  }
+  return x;
+}
+
+/* ---------- bank analysis ---------- */
+function analysisRange(){
+  const from = parseDate(Y.analysis.from)||new Date(Y.year,0,1);
+  const to = parseDate(Y.analysis.to)||new Date(Y.year+1,0,1);
+  const months = Math.max((to.getFullYear()-from.getFullYear())*12 + (to.getMonth()-from.getMonth()), 1);
+  const weeks = Math.max(daysBetween(from,to)/7, 1);
+  return {from, to, months, weeks};
+}
+function txnsInRange(){
+  const {from,to} = analysisRange();
+  return Y.txns.filter(t=>{ const d=parseDate(t.date); return d && d>=from && d<to; });
+}
+function categorise(desc){
+  const d = (desc||'').trim().toLowerCase();
+  if(!d) return '';
+  let bestLen = 0, bestCat = '';
+  for(const r of Y.rules){
+    const m = (r.match||'').trim().toLowerCase();
+    if(!m || !r.category) continue;
+    if(d === m) return r.category;
+    if(d.includes(m) && m.length > bestLen){ bestLen = m.length; bestCat = r.category; }
+  }
+  return bestCat;
+}
+function applyRules(force){
+  let n=0;
+  for(const t of Y.txns){
+    if(t.category && !force) continue;
+    const c = categorise(t.desc);
+    if(c && c!==t.category){ t.category=c; n++; }
+  }
+  return n;
+}
+function budgetVsActual(){
+  const {months,weeks} = analysisRange();
+  const rows = {};
+  for(const b of Y.bills){
+    const k = b.name;
+    if(!rows[k]) rows[k] = {category:k, spend:0, budgetAnnual:0, count:0, tracked:true};
+    rows[k].budgetAnnual += annualOf(b);
+  }
+  for(const t of txnsInRange()){
+    const k = t.category || 'Uncategorised';
+    if(!rows[k]) rows[k] = {category:k, spend:0, budgetAnnual:0, count:0, tracked:false};
+    rows[k].spend += num(t.debit);
+    rows[k].count++;
+  }
+  const out = Object.values(rows).map(r=>{
+    r.monthlyActual = r.spend/months;
+    r.weeklyActual = r.spend/weeks;
+    r.monthlyBudget = r.budgetAnnual/12;
+    r.varMonthly = r.monthlyActual - r.monthlyBudget;
+    r.budgetPeriod = r.monthlyBudget*months;
+    r.varPeriod = r.spend - r.budgetPeriod;
+    r.usePct = r.budgetPeriod>0 ? r.spend/r.budgetPeriod*100 : (r.spend>0?999:0);
+    return r;
+  });
+  out.sort((a,b)=> b.spend-a.spend);
+  return out;
+}
+
+/* ---------- loan amortisation (daily interest, matches the workbook) ---------- */
+function amortise(loan, useProposed){
+  const rate = num(loan.rate)/100;
+  const daily = rate/365.25;
+  const rpy = FREQ[loan.freq]||12;
+  const step = loan.freq;
+  const start = parseDate(loan.startDate) || new Date();
+  const base = useProposed ? (num(loan.proposedRepayment)||num(loan.repayment)) : num(loan.repayment);
+  const ppi = loan.ppi ? 0.0799*base : 0;
+  const pay = base + ppi;
+  const extras = loan.extras||{};
+  let bal = num(loan.opening), date = new Date(start.getTime());
+  const rows=[]; let interest=0, paid=0, n=0;
+  while(bal > 0.005 && n < 1200){
+    n++;
+    const prev = new Date(date.getTime());
+    if(step==='Weekly') date = addDays(date,7);
+    else if(step==='Fortnightly') date = addDays(date,14);
+    else if(step==='Quarterly') date = addMonths(date,3);
+    else if(step==='Annual') date = addMonths(date,12);
+    else date = addMonths(date,1);
+    const int = round2(daily*bal*daysBetween(prev,date));
+    const extra = useProposed ? num(extras[n]) : 0;
+    let principal = Math.min(bal, Math.max(pay - int, 0) + extra);
+    if(pay - int <= 0){ rows.push({n, date:iso(date), opening:bal, interest:int, principal:0, payment:int, balance:bal, stalled:true}); break; }
+    const payment = principal + int;
+    const closing = round2(bal - principal);
+    rows.push({n, date:iso(date), opening:round2(bal), interest:int, principal:round2(principal), payment:round2(payment), balance:closing, extra});
+    interest += int; paid += payment; bal = closing;
+  }
+  return {rows, interest:round2(interest), paid:round2(paid), payments:rows.length,
+          end: rows.length? rows[rows.length-1].date : '', repayment:pay, cleared: bal<=0.005};
+}
+function monthsBetween(a,b){   // DATEDIF "m" semantics: whole months only
+  let m = (b.getFullYear()-a.getFullYear())*12 + (b.getMonth()-a.getMonth());
+  if(b.getDate() < a.getDate()) m--;
+  return m;
+}
+function calcRepayment(loan){
+  // level repayment to clear by the target end date
+  const rate = num(loan.rate)/100, rpy = FREQ[loan.freq]||12;
+  const start = parseDate(loan.startDate), end = parseDate(loan.endDate);
+  if(!start||!end) return 0;
+  const months = monthsBetween(start,end);
+  const nper = rpy*(months/12);
+  if(nper<=0) return 0;
+  const i = Math.pow(rate/365.25+1, 365.25/rpy)-1;
+  const pv = num(loan.opening);
+  if(i===0) return round2(pv/nper);
+  return round2(pv*i/(1-Math.pow(1+i,-nper)));
+}
+
+/* ---------- savings projection ---------- */
+function projectSavings(){
+  const s = Y.savings;
+  const start = parseDate(s.startDate) || new Date(Y.year,0,1);
+  const months = clamp(num(s.months)||24, 1, 600);
+  const g = num(s.growthPct)/100/12;
+  const rows=[];
+  let bal = s.accounts.map(a=>num(a.opening));
+  for(let m=0;m<=months;m++){
+    const date = addMonths(start,m);
+    if(m>0){
+      bal = bal.map((v,i)=>{
+        const a = s.accounts[i];
+        const adj = (a.adjust&&a.adjust[monthKey(date)])?num(a.adjust[monthKey(date)]):0;
+        return round2(v*(1+g) + num(a.monthly) - adj);
+      });
+    }
+    rows.push({date:iso(date), values:bal.slice(), total:round2(bal.reduce((x,y)=>x+y,0))});
+  }
+  return rows;
+}
+
+/* ---------------- charts (canvas, no libraries) ----------------
+   Sizing rule: the .chartbox owns the dimensions. We set the canvas
+   CSS size in px and the backing store to css * dpr, so the element
+   can never feed its own attribute height back into layout.
+-----------------------------------------------------------------*/
+function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+
+function prep(cv, height){
+  const box = cv.parentNode;
+  const w = Math.max(Math.floor(box.clientWidth) || 0, 260);
+  const h = Math.max(Math.floor(height || box.clientHeight) || 0, 150);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.style.width = w+'px';
+  cv.style.height = h+'px';
+  cv.width = Math.round(w*dpr);
+  cv.height = Math.round(h*dpr);
+  const c = cv.getContext('2d');
+  if(!c) return null;
+  c.setTransform(dpr,0,0,dpr,0,0);
+  c.clearRect(0,0,w,h);
+  c.font = '11px ui-monospace,Menlo,Consolas,monospace';
+  c.textBaseline = 'middle';
+  return {c,w,h};
+}
+
+function shortNum(v){
+  const a = Math.abs(v);
+  const s = a>=1e6 ? (a/1e6).toFixed(a>=1e7?0:1)+'m'
+          : a>=1e4 ? Math.round(a/1e3)+'k'
+          : a>=1e3 ? (a/1e3).toFixed(1)+'k'
+          : Math.round(a).toString();
+  return (v<0?'-':'')+CUR+s;
+}
+function ticks(min,max,n){
+  const out=[]; for(let i=0;i<=n;i++) out.push(min+(max-min)*i/n); return out;
+}
+/* nice round upper bound so gridlines land on sane numbers */
+function niceBounds(min,max){
+  if(max===min){ max = min+1; }
+  const span = max-min;
+  const step = Math.pow(10, Math.floor(Math.log10(span/4)));
+  const mult = [1,2,2.5,5,10].find(m=> span/4 <= step*m) || 10;
+  const s = step*mult;
+  return {lo: Math.floor(min/s)*s, hi: Math.ceil(max/s)*s, step:s};
+}
+function gridY(c,w,h,pad,lo,hi,n){
+  c.save();
+  c.strokeStyle = css('--line'); c.fillStyle = css('--muted'); c.lineWidth = 1;
+  c.textAlign='right';
+  ticks(lo,hi,n).forEach(v=>{
+    const y = Math.round(h-pad.b-(v-lo)/(hi-lo||1)*(h-pad.t-pad.b))+.5;
+    c.beginPath(); c.moveTo(pad.l,y); c.lineTo(w-pad.r,y); c.stroke();
+    c.fillText(shortNum(v), pad.l-8, y);
+  });
+  c.restore();
+}
+function axisWidth(c,lo,hi,n){
+  let m=0; ticks(lo,hi,n).forEach(v=> m=Math.max(m, c.measureText(shortNum(v)).width));
+  return Math.ceil(m)+14;
+}
+function roundRect(c,x,y,w,h,r){
+  r = Math.min(r, h/2, w/2);
+  c.beginPath();
+  c.moveTo(x+r,y); c.lineTo(x+w-r,y); c.quadraticCurveTo(x+w,y,x+w,y+r);
+  c.lineTo(x+w,y+h-r); c.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  c.lineTo(x+r,y+h); c.quadraticCurveTo(x,y+h,x,y+h-r);
+  c.lineTo(x,y+r); c.quadraticCurveTo(x,y,x+r,y); c.closePath(); c.fill();
+}
+function ellipsis(c,s,maxw){
+  s = String(s);
+  if(c.measureText(s).width <= maxw) return s;
+  while(s.length>1 && c.measureText(s+'\u2026').width > maxw) s = s.slice(0,-1);
+  return s+'\u2026';
+}
+
+/* ---- horizontal grouped bars: category labels read straight across,
+        so nothing rotates and nothing collides ---- */
+function hBars(cv, labels, series){
+  const rowH = series.length>1 ? 15 : 20;
+  const gap = 16;
+  const height = labels.length ? labels.length*(series.length*rowH+gap) + 34 : 150;
+  const p = prep(cv, height); if(!p) return;
+  const {c,w,h} = p;
+
+  let max=0, min=0;
+  series.forEach(s=>s.values.forEach(v=>{ if(isFinite(v)){ max=Math.max(max,v); min=Math.min(min,v);} }));
+  const nb = niceBounds(Math.min(min,0), max||1);
+  let labelW = 0;
+  labels.forEach(l=> labelW = Math.max(labelW, c.measureText(l).width));
+  labelW = Math.min(Math.ceil(labelW)+12, Math.max(90, w*0.32));
+  const pad = {l:labelW, r:56, t:6, b:24};
+  const plotW = w-pad.l-pad.r;
+  const X = v => pad.l + (v-nb.lo)/(nb.hi-nb.lo||1)*plotW;
+
+  // vertical gridlines + value scale along the bottom
+  c.save();
+  c.strokeStyle=css('--line'); c.fillStyle=css('--muted'); c.textAlign='center'; c.lineWidth=1;
+  ticks(nb.lo,nb.hi,4).forEach(v=>{
+    const x = Math.round(X(v))+.5;
+    c.beginPath(); c.moveTo(x,pad.t); c.lineTo(x,h-pad.b); c.stroke();
+    c.fillText(shortNum(v), x, h-pad.b+11);
+  });
+  c.restore();
+
+  const band = series.length*rowH+gap;
+  labels.forEach((lb,i)=>{
+    const top = pad.t + i*band + gap/2;
+    c.fillStyle = css('--text'); c.textAlign='right';
+    c.fillText(ellipsis(c,lb,pad.l-12), pad.l-10, top + series.length*rowH/2);
+    series.forEach((s,k)=>{
+      const v = s.values[i]||0;
+      const y = top + k*rowH;
+      const x0 = X(Math.min(0,v)), x1 = X(Math.max(0,v));
+      c.fillStyle = s.color;
+      roundRect(c, x0, y+1, Math.max(2,x1-x0), rowH-3, 2);
+      c.fillStyle = css('--muted'); c.textAlign='left';
+      c.fillText(shortNum(v), x1+6, y+rowH/2);
+    });
+  });
+}
+
+/* ---- line / area ---- */
+function lineChart(cv, labels, series, opts){
+  opts = opts||{};
+  const p = prep(cv, opts.height); if(!p) return;
+  const {c,w,h} = p;
+  const n = labels.length;
+  if(!n){ c.fillStyle=css('--muted'); c.textAlign='center'; c.fillText('No data yet', w/2, h/2); return; }
+
+  let max=-Infinity, min=Infinity;
+  series.forEach(s=>s.values.forEach(v=>{ if(isFinite(v)){ max=Math.max(max,v); min=Math.min(min,v);} }));
+  if(!isFinite(max)){ max=1; min=0; }
+  const nb = niceBounds(min>0?0:min, max);
+  const pad = {l:axisWidth(c,nb.lo,nb.hi,4), r:14, t:10, b:26};
+  gridY(c,w,h,pad,nb.lo,nb.hi,4);
+
+  const X = i => pad.l + (n<2 ? (w-pad.l-pad.r)/2 : i*(w-pad.l-pad.r)/(n-1));
+  const Yv = v => h-pad.b-(v-nb.lo)/(nb.hi-nb.lo||1)*(h-pad.t-pad.b);
+
+  series.forEach(s=>{
+    const pts = s.values.map((v,i)=>[X(i), Yv(isFinite(v)?v:nb.lo)]);
+    if(s.fill && pts.length>1){
+      c.beginPath(); pts.forEach((q,i)=> i?c.lineTo(q[0],q[1]):c.moveTo(q[0],q[1]));
+      c.lineTo(pts[pts.length-1][0], Yv(nb.lo)); c.lineTo(pts[0][0], Yv(nb.lo)); c.closePath();
+      c.globalAlpha=.12; c.fillStyle=s.color; c.fill(); c.globalAlpha=1;
+    }
+    c.strokeStyle=s.color; c.lineWidth=2; c.lineJoin='round'; c.lineCap='round';
+    c.beginPath(); pts.forEach((q,i)=> i?c.lineTo(q[0],q[1]):c.moveTo(q[0],q[1]));
+    if(s.dash) c.setLineDash([5,4]);
+    c.stroke(); c.setLineDash([]);
+    if(pts.length===1){ c.fillStyle=s.color; c.beginPath(); c.arc(pts[0][0],pts[0][1],3,0,7); c.fill(); }
+  });
+
+  // x labels: only as many as actually fit
+  c.fillStyle=css('--muted');
+  const lw = Math.max(...labels.map(l=>c.measureText(l).width)) + 16;
+  const every = Math.max(1, Math.ceil(n/Math.max(1,Math.floor((w-pad.l-pad.r)/lw))));
+  labels.forEach((lb,i)=>{
+    if(i % every) return;
+    const x = X(i);
+    if(x > w-pad.r-lw/2 && i!==n-1) return;
+    c.textAlign = i===0 ? 'left' : 'center';
+    c.fillText(lb, i===0? pad.l : x, h-pad.b+12);
+  });
+  attachTip(cv, {labels, series, X, Yv, pad, w, h});
+}
+
+/* ---- donut ---- */
+function donut(cv, items, opts){
+  opts = opts||{};
+  const p = prep(cv, opts.height); if(!p) return;
+  const {c,w,h} = p;
+  const total = items.reduce((s,i)=>s+Math.max(0,i.value),0);
+  const cx=w/2, cy=h/2, r=Math.max(20, Math.min(w,h)/2-10), ir=r*0.62;
+  if(total<=0){
+    c.strokeStyle=css('--line'); c.lineWidth=r-ir;
+    c.beginPath(); c.arc(cx,cy,(r+ir)/2,0,Math.PI*2); c.stroke();
+    c.fillStyle=css('--muted'); c.textAlign='center'; c.fillText('No data', cx, cy);
+    return;
+  }
+  let a=-Math.PI/2;
+  items.forEach(it=>{
+    const sweep = Math.max(0,it.value)/total*Math.PI*2;
+    if(sweep<=0) return;
+    c.beginPath(); c.moveTo(cx,cy); c.arc(cx,cy,r,a,a+sweep); c.closePath();
+    c.fillStyle = it.color; c.fill();
+    // hairline separator so adjacent slices stay distinct
+    c.strokeStyle = css('--surface'); c.lineWidth=1.5;
+    c.beginPath(); c.moveTo(cx,cy); c.lineTo(cx+Math.cos(a)*r, cy+Math.sin(a)*r); c.stroke();
+    a += sweep;
+  });
+  c.globalCompositeOperation='destination-out';
+  c.beginPath(); c.arc(cx,cy,ir,0,Math.PI*2); c.fill();
+  c.globalCompositeOperation='source-over';
+  c.fillStyle=css('--text'); c.textAlign='center';
+  c.font='600 15px ui-monospace,Menlo,Consolas,monospace';
+  c.fillText(shortNum(total), cx, cy-6);
+  c.font='10px ui-monospace,Menlo,Consolas,monospace'; c.fillStyle=css('--muted');
+  c.fillText(opts.caption||'total', cx, cy+10);
+}
+
+/* ---- shared hover tooltip for line charts ---- */
+function attachTip(cv, ctx){
+  const box = cv.parentNode;
+  let tip = box.querySelector('.tip');
+  if(!tip){ tip = document.createElement('div'); tip.className='tip'; box.appendChild(tip); }
+  cv._tip = ctx;
+  if(cv._tipBound) return;
+  cv._tipBound = true;
+  const move = e=>{
+    const d = cv._tip; if(!d) return;
+    const rect = cv.getBoundingClientRect();
+    const x = e.clientX-rect.left, y = e.clientY-rect.top;
+    if(x < d.pad.l-8 || x > d.w-d.pad.r+8){ tip.classList.remove('on'); return; }
+    const n = d.labels.length;
+    const step = n<2 ? 1 : (d.w-d.pad.l-d.pad.r)/(n-1);
+    const i = clamp(Math.round((x-d.pad.l)/step), 0, n-1);
+    tip.innerHTML = '<b>'+esc(d.labels[i])+'</b>'+ d.series.map(s=>
+      `<span><i style="background:${s.color}"></i>${esc(s.name||'')} ${fmt(s.values[i]||0)}</span>`).join('<br>');
+    tip.classList.add('on');
+    const tw = tip.offsetWidth, th = tip.offsetHeight;
+    tip.style.left = clamp(d.X(i)-tw/2, 2, Math.max(2,d.w-tw-2))+'px';
+    tip.style.top  = clamp(y-th-12, 2, Math.max(2,d.h-th-2))+'px';
+  };
+  cv.addEventListener('mousemove', move);
+  cv.addEventListener('mouseleave', ()=> tip.classList.remove('on'));
+}
+
+const PALETTE = ['#4fb3a3','#d6a544','#d0625d','#6f8fd0','#a97fc9','#6faf6c','#c98a5a','#5aa9c9','#c96f9b','#8a94a5'];
+function legendHtml(items){
+  return '<div class="legend">'+items.map(i=>`<span><i style="background:${i.color}"></i>${esc(i.label)}</span>`).join('')+'</div>';
+}
+function esc(s){ return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+/* ---------------- app shell ---------------- */
+const TABS = [
+  ['dashboard','Dashboard'], ['budget','Budget'], ['tax','Tax'], ['loans','Loans'],
+  ['bank','Bank'], ['savings','Savings'], ['history','History'], ['data','Data']
+];
+let active = 'dashboard';
+const charts = [];   // redraw hooks for theme/resize
+let RO = null, redrawTimer = null;
+function redrawCharts(){
+  clearTimeout(redrawTimer);
+  redrawTimer = setTimeout(()=> charts.forEach(f=>{ try{ f(); }catch(e){ console.warn(e); } }), 100);
+}
+/* charts are sized from their container, so redraw whenever a container resizes */
+function observeCharts(){
+  if(!window.ResizeObserver) return;
+  if(!RO) RO = new ResizeObserver(redrawCharts);
+  RO.disconnect();
+  $$('.chartbox').forEach(b=> RO.observe(b));
+}
+
+function renderTabs(){
+  $('#tabs').innerHTML = TABS.map(([id,label])=>
+    `<button data-tab="${id}" class="${id===active?'active':''}">${label}</button>`).join('');
+}
+function renderYears(){
+  const ys = Object.keys(DB.years).sort();
+  $('#yearSel').innerHTML = ys.map(y=>`<option value="${y}" ${y===DB.active?'selected':''}>${y}</option>`).join('');
+}
+function render(){
+  charts.length = 0;
+  CUR = Y.currency || '€';
+  renderTabs(); renderYears();
+  $$('section').forEach(s=>s.classList.remove('active'));
+  const el = $('#tab-'+active); el.classList.add('active');
+  ({dashboard:renderDashboard, budget:renderBudget, tax:renderTax, loans:renderLoans,
+    bank:renderBank, savings:renderSavings, history:renderHistory, data:renderData}[active])(el);
+  charts.forEach(f=>{ try{ f(); }catch(e){ console.warn(e); } });
+  observeCharts();
+}
+function go(tab){ active=tab; render(); window.scrollTo({top:0}); }
+function chart(fn){ charts.push(fn); }
+
+/* re-render helpers used by inputs */
+function bind(el, obj, key, opts){
+  opts = opts||{};
+  el.addEventListener('change', ()=>{
+    obj[key] = opts.number ? num(el.value) : (el.type==='checkbox'? el.checked : el.value);
+    save();
+    if(opts.rerender!==false) render();
+  });
+}
+function onInput(sel, root, fn){
+  $$(sel, root).forEach(el=> el.addEventListener('change', ()=>{ fn(el); save(); render(); }));
+}
+
+/* generic editable-table wiring: elements carry data-path="collection.index.field" */
+function wireFields(root){
+  $$('[data-path]', root).forEach(el=>{
+    el.addEventListener('change', ()=>{
+      const parts = el.dataset.path.split('.');
+      let ref = Y;
+      for(let i=0;i<parts.length-1;i++) ref = ref[parts[i]];
+      const key = parts[parts.length-1];
+      let v = el.type==='checkbox' ? el.checked : el.value;
+      if(el.dataset.type==='number') v = num(v);
+      ref[key] = v;
+      save();
+      if(el.dataset.norender===undefined) render();
+    });
+  });
+}
+
+/* ---------------- dashboard ---------------- */
+function renderDashboard(el){
+  const bands = Y.taxBands;
+  const people = Y.people.map(p=>({p, t:calcTax(p,bands)}));
+  const netMonthly = people.reduce((s,x)=>s+x.t.netMonthly,0);
+  const bt = billTotals();
+  const rows = budgetVsActual();
+  const {months} = analysisRange();
+  const spend = rows.reduce((s,r)=>s+r.spend,0);
+  const surplus = netMonthly - bt.monthly;
+  const loanBal = Y.loans.reduce((s,l)=>s+num(l.opening),0);
+  const savingsNow = (Y.savings.accounts||[]).reduce((s,a)=>s+num(a.opening),0);
+  const proj = projectSavings();
+  const projEnd = proj.length? proj[proj.length-1].total : 0;
+
+  const kpi = (lbl,val,sub,cls)=>`<div class="kpi"><div class="lbl">${lbl}</div>
+    <div class="val ${cls||''}">${val}</div><div class="sub">${sub||''}</div></div>`;
+
+  const top = rows.filter(r=>r.spend>0).slice(0,9);
+  const uncat = Y.txns.filter(t=>!t.category).length;
+
+  el.innerHTML = `
+  <div class="grid g4" style="margin-bottom:14px">
+    ${kpi('Net income / month', fmt0(netMonthly), people.map(x=>esc(x.p.name)).join(' + ')||'no earners set')}
+    ${kpi('Budgeted outgoings', fmt0(bt.monthly), fmt0(bt.annual)+' a year')}
+    ${kpi('Monthly surplus', fmt0(surplus), surplus>=0?'left after budgeted bills':'over-committed', surplus>=0?'pos':'neg')}
+    ${kpi('Actual spend', fmt0(spend/months)+'/mo', `${Y.txns.length} transactions loaded`)}
+    ${kpi('Savings today', fmt0(savingsNow), `projected ${fmt0(projEnd)} in ${Y.savings.months||0} months`)}
+    ${kpi('Loan balances', fmt0(loanBal), Y.loans.length+' loan'+(Y.loans.length===1?'':'s'))}
+  </div>
+
+  <div class="grid g2">
+    <div class="card">
+      <h2>Budget vs actual - monthly</h2>
+      <div class="chartbox auto"><canvas id="cBudget"></canvas></div>
+      ${legendHtml([{label:'Budget',color:PALETTE[0]},{label:'Actual',color:PALETTE[1]}])}
+      ${top.length?'':'<div class="empty">Import a bank statement to compare against your budget.</div>'}
+    </div>
+    <div class="card">
+      <h2>Where the money goes</h2>
+      <div class="chartbox"><canvas id="cShare"></canvas></div>
+      <div id="shareLegend"></div>
+    </div>
+  </div>
+
+  <div class="grid g2">
+    <div class="card">
+      <h2>Spend by month</h2>
+      <div class="chartbox"><canvas id="cMonthly"></canvas></div>
+      ${legendHtml([{label:'Spend',color:PALETTE[2]},{label:'Budget',color:PALETTE[0]}])}
+    </div>
+    <div class="card">
+      <h2>Savings projection</h2>
+      <div class="chartbox"><canvas id="cSave"></canvas></div>
+      <div class="note">${Y.savings.accounts.length? esc(Y.savings.accounts.map(a=>a.name).join(', ')) : 'Add accounts on the Savings tab.'}</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Attention</h2>
+    ${attentionList(rows, uncat)}
+  </div>`;
+
+  chart(()=>{
+    hBars($('#cBudget'), top.map(r=>r.category), [
+      {name:'Budget', color:PALETTE[0], values:top.map(r=>r.monthlyBudget)},
+      {name:'Actual', color:PALETTE[1], values:top.map(r=>r.monthlyActual)}
+    ]);
+    const items = top.map((r,i)=>({label:r.category, value:r.spend, color:PALETTE[i%PALETTE.length]}));
+    donut($('#cShare'), items, {caption:'spend'});
+    $('#shareLegend').innerHTML = items.length? legendHtml(items) : '<div class="note">No categorised spend in the selected range.</div>';
+
+    const byMonth = {};
+    for(const t of txnsInRange()){
+      const k = monthKey(parseDate(t.date));
+      byMonth[k] = (byMonth[k]||0) + num(t.debit);
+    }
+    const mk = Object.keys(byMonth).sort();
+    lineChart($('#cMonthly'), mk, [
+      {name:'Spend', color:PALETTE[2], values:mk.map(k=>byMonth[k]), fill:true},
+      {name:'Budget', color:PALETTE[0], values:mk.map(()=>bt.monthly), dash:true}
+    ]);
+    lineChart($('#cSave'), proj.map(r=>r.date.slice(0,7)), [
+      {name:'Savings', color:PALETTE[5], values:proj.map(r=>r.total), fill:true}
+    ]);
+  });
+}
+function attentionList(rows, uncat){
+  const out=[];
+  const over = rows.filter(r=>r.budgetPeriod>0 && r.varPeriod>0).sort((a,b)=>b.varPeriod-a.varPeriod).slice(0,5);
+  const due = Y.bills.map(b=>({b, d:nextDueFrom(b)})).filter(x=>x.d)
+    .filter(x=> daysBetween(new Date(), x.d) <= 14).sort((a,b)=>a.d-b.d).slice(0,5);
+  if(due.length) out.push(`<b>Due in the next 14 days</b><ul style="margin:6px 0 12px">`+
+    due.map(x=>`<li>${esc(x.b.name)} - ${fmt(num(x.b.amount))} on ${iso(x.d)}</li>`).join('')+`</ul>`);
+  if(over.length) out.push(`<b>Over budget this period</b><ul style="margin:6px 0 12px">`+
+    over.map(r=>`<li>${esc(r.category)} - ${fmt(r.varPeriod)} over (${pct(r.usePct)} of budget)</li>`).join('')+`</ul>`);
+  if(uncat) out.push(`<b>${uncat} transaction${uncat===1?'':'s'} without a category.</b> Add rules on the Bank tab.`);
+  return out.length? out.join('') : '<div class="note">Nothing needs attention.</div>';
+}
+
+/* ---------------- budget ---------------- */
+function renderBudget(el){
+  const bands = Y.taxBands;
+  const people = Y.people.map(p=>({p, t:calcTax(p,bands)}));
+  const totalNet = people.reduce((s,x)=>s+x.t.netMonthly,0);
+  const bt = billTotals();
+  const joint = bt.joint/12;
+
+  const shares = people.map(x=>{
+    let sh;
+    if(Y.splitMode==='manual') sh = num(Y.splitManual[x.p.id]) || (1/people.length);
+    else sh = totalNet? x.t.netMonthly/totalNet : 1/people.length;
+    return sh;
+  });
+  const shSum = shares.reduce((a,b)=>a+b,0)||1;
+
+  const holders = Array.from(new Set(['Joint', ...Y.people.map(p=>p.name), ...Y.bills.map(b=>b.holder).filter(Boolean)]));
+  const splitRows = people.map((x,i)=>{
+    const share = shares[i]/shSum;
+    const jointPay = joint*share;
+    const own = (bt.byHolder[x.p.name]||0)/12;
+    const left = x.t.netMonthly - jointPay - own;
+    return `<tr>
+      <td>${esc(x.p.name)}</td>
+      <td class="n">${fmt(x.t.netMonthly)}</td>
+      <td class="n">${Y.splitMode==='manual'
+        ? `<input class="num" style="width:70px;text-align:right" data-share="${x.p.id}" value="${(share*100).toFixed(1)}">`
+        : pct(share*100)}</td>
+      <td class="n">${fmt(jointPay)}</td>
+      <td class="n">${fmt(jointPay*12/52)}</td>
+      <td class="n">${fmt(own)}</td>
+      <td class="n ${left>=0?'pos':'neg'}">${fmt(left)}</td>
+      <td class="n">${fmt(left*12/52)}</td></tr>`;
+  }).join('');
+
+  const actualByName = {};
+  budgetVsActual().forEach(r=> actualByName[r.category]=r);
+
+  const billRows = Y.bills.map((b,i)=>{
+    const a = annualOf(b), act = actualByName[b.name];
+    const due = nextDueFrom(b);
+    const usage = act && act.monthlyBudget>0 ? act.monthlyActual/act.monthlyBudget*100 : null;
+    return `<tr>
+      <td><input data-path="bills.${i}.name" value="${esc(b.name)}"></td>
+      <td><select data-path="bills.${i}.freq">${Object.keys(FREQ).map(f=>`<option ${f===b.freq?'selected':''}>${f}</option>`).join('')}</select></td>
+      <td><select data-path="bills.${i}.holder">${holders.map(h=>`<option ${h===b.holder?'selected':''}>${esc(h)}</option>`).join('')}</select></td>
+      <td class="n"><input class="num" style="text-align:right" data-path="bills.${i}.amount" data-type="number" value="${num(b.amount)}"></td>
+      <td class="n">${fmt(a)}</td>
+      <td class="n">${fmt(a/12)}</td>
+      <td class="n">${fmt(a/52)}</td>
+      <td><input type="date" data-path="bills.${i}.nextDue" value="${b.nextDue||''}" style="min-width:130px"></td>
+      <td class="n">${due?iso(due):'<span class="mut">-</span>'}</td>
+      <td class="n">${act?fmt(act.monthlyActual):'<span class="mut">-</span>'}</td>
+      <td>${usage===null?'':barHtml(usage)}</td>
+      <td class="act"><button class="btn sm danger" data-del-bill="${i}">x</button></td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `
+  <div class="card">
+    <h2>Income split</h2>
+    <div class="row" style="margin-bottom:10px">
+      <label class="f" style="width:200px"><span>Split joint bills by</span>
+        <select id="splitMode">
+          <option value="income" ${Y.splitMode==='income'?'selected':''}>Share of net income</option>
+          <option value="manual" ${Y.splitMode==='manual'?'selected':''}>Manual percentages</option>
+        </select></label>
+      <div class="spacer"></div>
+      <div class="kpi" style="min-width:150px"><div class="lbl">Joint pot / month</div><div class="val">${fmt0(joint)}</div></div>
+    </div>
+    <div class="tw"><table>
+      <thead><tr><th>Person</th><th class="n">Net / month</th><th class="n">Share</th>
+        <th class="n">Joint payment</th><th class="n">Weekly</th><th class="n">Own bills</th>
+        <th class="n">Remaining</th><th class="n">Weekly</th></tr></thead>
+      <tbody>${splitRows||'<tr><td colspan="8" class="empty">Add people on the Tax tab.</td></tr>'}</tbody>
+    </table></div>
+  </div>
+
+  <div class="card">
+    <h2>Bills</h2>
+    <div class="tw"><table>
+      <thead><tr><th>Bill</th><th>Frequency</th><th>Holder</th><th class="n">Amount</th>
+        <th class="n">Annual</th><th class="n">Monthly</th><th class="n">Weekly</th>
+        <th>Next due</th><th class="n">Upcoming</th><th class="n">Actual /mo</th><th>Budget used</th><th></th></tr></thead>
+      <tbody>${billRows||'<tr><td colspan="12" class="empty">No bills yet - add one below or import your JSON on the Data tab.</td></tr>'}</tbody>
+      <tfoot><tr><td>Total</td><td></td><td></td>
+        <td class="n">${fmt(Y.bills.reduce((s,b)=>s+num(b.amount),0))}</td>
+        <td class="n">${fmt(bt.annual)}</td><td class="n">${fmt(bt.monthly)}</td><td class="n">${fmt(bt.weekly)}</td>
+        <td colspan="5"></td></tr></tfoot>
+    </table></div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" id="addBill">+ Add bill</button>
+      <button class="btn" id="exportBills">Export CSV</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>By holder</h2>
+    <div class="grid g4">
+      ${Object.entries(bt.byHolder).map(([h,a])=>`<div class="kpi"><div class="lbl">${esc(h)}</div>
+        <div class="val">${fmt0(a/12)}</div><div class="sub">${fmt0(a)} a year</div></div>`).join('')
+        || '<div class="note">No bills yet.</div>'}
+    </div>
+  </div>`;
+
+  wireFields(el);
+  $('#splitMode').onchange = e=>{ Y.splitMode = e.target.value; save(); render(); };
+  $$('[data-share]', el).forEach(inp=> inp.onchange = ()=>{
+    Y.splitManual[inp.dataset.share] = num(inp.value)/100; save(); render();
+  });
+  $('#addBill').onclick = ()=>{
+    Y.bills.push({id:uid(), name:'New bill', freq:'Monthly', holder:'Joint', amount:0, nextDue:''});
+    save(); render();
+  };
+  $$('[data-del-bill]', el).forEach(b=> b.onclick = ()=>{
+    Y.bills.splice(+b.dataset.delBill,1); save(); render();
+  });
+  $('#exportBills').onclick = ()=> downloadCSV('bills-'+Y.year+'.csv', billsCSV());
+}
+function barHtml(usePct){
+  const p = clamp(usePct,0,160);
+  const w = p/160*100;
+  const over = usePct>100;
+  return `<div class="bar" title="${usePct.toFixed(0)}% of budget">
+    <i class="${over?'over':'under'}" style="width:${w}%"></i>
+    <b style="left:${100/160*100}%"></b>
+    <em>${usePct>999?'-':Math.round(usePct)+'%'}</em></div>`;
+}
+
+/* ---------------- tax ---------------- */
+function renderTax(el){
+  const b = Y.taxBands;
+  const cards = Y.people.map((p,i)=>{
+    const t = calcTax(p,b);
+    return `<div class="card">
+      <div class="row" style="margin-bottom:10px">
+        <label class="f" style="flex:1;min-width:140px"><span>Name</span>
+          <input data-path="people.${i}.name" value="${esc(p.name)}"></label>
+        <button class="btn sm danger" data-del-person="${i}" title="Remove">x</button>
+      </div>
+      <div class="grid g3">
+        <label class="f"><span>Gross annual salary</span><input class="num" data-path="people.${i}.gross" data-type="number" value="${num(p.gross)}"></label>
+        <label class="f"><span>Pension %</span><input class="num" data-path="people.${i}.pensionPct" data-type="number" value="${num(p.pensionPct)}"></label>
+        <label class="f"><span>AVC / month</span><input class="num" data-path="people.${i}.avcMonthly" data-type="number" value="${num(p.avcMonthly)}"></label>
+        <label class="f"><span>BIK / month</span><input class="num" data-path="people.${i}.bikMonthly" data-type="number" value="${num(p.bikMonthly)}"></label>
+        <label class="f"><span>Standard rate band</span><input class="num" data-path="people.${i}.srcop" data-type="number" value="${num(p.srcop)}"></label>
+        <label class="f"><span>Bonus (gross)</span><input class="num" data-path="people.${i}.bonus" data-type="number" value="${num(p.bonus)}"></label>
+      </div>
+      <div class="tw"><table>
+        <thead><tr><th>Tax credits</th><th class="n">Annual</th><th></th></tr></thead>
+        <tbody>${(p.credits||[]).map((c,ci)=>`<tr>
+          <td><input data-path="people.${i}.credits.${ci}.name" value="${esc(c.name)}"></td>
+          <td class="n"><input class="num" style="text-align:right" data-path="people.${i}.credits.${ci}.amount" data-type="number" value="${num(c.amount)}"></td>
+          <td class="act"><button class="btn sm danger" data-del-credit="${i}.${ci}">x</button></td></tr>`).join('')}
+        </tbody>
+        <tfoot><tr><td>Total credits</td><td class="n">${fmt(t.credits)}</td><td></td></tr></tfoot>
+      </table></div>
+      <button class="btn sm" data-add-credit="${i}" style="margin:8px 0 14px">+ Add credit</button>
+
+      <div class="tw"><table>
+        <thead><tr><th>Calculation</th><th class="n">Annual</th><th class="n">Monthly</th></tr></thead>
+        <tbody>
+          <tr><td>Gross pay (incl. BIK)</td><td class="n">${fmt(t.grossPay)}</td><td class="n mut">${fmt(t.grossPay/12)}</td></tr>
+          <tr><td>Pension + AVC</td><td class="n">${fmt(t.pension+t.avc)}</td><td class="n mut">${fmt((t.pension+t.avc)/12)}</td></tr>
+          <tr><td>Taxable pay</td><td class="n">${fmt(t.taxable)}</td><td class="n mut">${fmt(t.taxable/12)}</td></tr>
+          <tr><td>Tax @ ${(b.lowRate*100).toFixed(0)}%</td><td class="n">${fmt(t.tax20)}</td><td class="n mut">${fmt(t.tax20/12)}</td></tr>
+          <tr><td>Tax @ ${(b.highRate*100).toFixed(0)}%</td><td class="n">${fmt(t.tax40)}</td><td class="n mut">${fmt(t.tax40/12)}</td></tr>
+          <tr><td>Less credits</td><td class="n">-${fmt(t.credits)}</td><td class="n mut">-${fmt(t.credits/12)}</td></tr>
+          <tr><td><b>PAYE</b></td><td class="n"><b>${fmt(t.paye)}</b></td><td class="n mut">${fmt(t.paye/12)}</td></tr>
+          <tr><td>PRSI</td><td class="n">${fmt(t.prsi)}</td><td class="n mut">${fmt(t.prsi/12)}</td></tr>
+          <tr><td>USC</td><td class="n">${fmt(t.usc)}</td><td class="n mut">${fmt(t.usc/12)}</td></tr>
+          <tr><td>Total deductions</td><td class="n neg">${fmt(t.deductions)}</td><td class="n mut">${fmt(t.deductions/12)}</td></tr>
+          <tr><td><b>Net income</b></td><td class="n pos"><b>${fmt(t.net)}</b></td><td class="n pos">${fmt(t.netMonthly)}</td></tr>
+          <tr><td>Effective tax rate</td><td class="n">${pct(t.effective)}</td><td class="n"></td></tr>
+        </tbody>
+      </table></div>
+      ${num(p.bonus)>0?`<div class="tw" style="margin-top:12px"><table>
+        <thead><tr><th>Bonus</th><th class="n">Amount</th></tr></thead>
+        <tbody>
+          <tr><td>Gross bonus</td><td class="n">${fmt(t.bonus)}</td></tr>
+          <tr><td>Income tax</td><td class="n">-${fmt(t.bTax)}</td></tr>
+          <tr><td>PRSI</td><td class="n">-${fmt(t.bPrsi)}</td></tr>
+          <tr><td>USC</td><td class="n">-${fmt(t.bUsc)}</td></tr>
+          <tr><td><b>Bonus after tax</b></td><td class="n pos"><b>${fmt(t.bonusNet)}</b></td></tr>
+        </tbody></table></div>`:''}
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `
+  <div class="card">
+    <h2>Tax year settings - ${Y.year}</h2>
+    <div class="grid g4">
+      <label class="f"><span>Standard rate band (single)</span><input class="num" data-path="taxBands.srcopSingle" data-type="number" value="${b.srcopSingle}"></label>
+      <label class="f"><span>Low rate</span><input class="num" data-path="taxBands.lowRate" data-type="number" step="0.01" value="${b.lowRate}"></label>
+      <label class="f"><span>High rate</span><input class="num" data-path="taxBands.highRate" data-type="number" step="0.01" value="${b.highRate}"></label>
+      <label class="f"><span>PRSI rate (start of year)</span><input class="num" data-path="taxBands.prsiRate1" data-type="number" step="0.0001" value="${b.prsiRate1}"></label>
+      <label class="f"><span>PRSI rate (after change)</span><input class="num" data-path="taxBands.prsiRate2" data-type="number" step="0.0001" value="${b.prsiRate2}"></label>
+      <label class="f"><span>PRSI change month</span><input class="num" data-path="taxBands.prsiChangeMonth" data-type="number" value="${b.prsiChangeMonth}"></label>
+      <label class="f"><span>USC exemption</span><input class="num" data-path="taxBands.uscExempt" data-type="number" value="${b.uscExempt}"></label>
+    </div>
+    <div class="tw"><table>
+      <thead><tr><th>USC band</th><th class="n">Up to</th><th class="n">Rate</th><th></th></tr></thead>
+      <tbody>${b.uscBands.map((u,i)=>`<tr>
+        <td>Band ${i+1}</td>
+        <td class="n"><input class="num" style="text-align:right" data-path="taxBands.uscBands.${i}.to" data-type="number" value="${u.to}"></td>
+        <td class="n"><input class="num" style="text-align:right" data-path="taxBands.uscBands.${i}.rate" data-type="number" step="0.001" value="${u.rate}"></td>
+        <td class="act"><button class="btn sm danger" data-del-usc="${i}">x</button></td></tr>`).join('')}</tbody>
+    </table></div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn sm" id="addUsc">+ Add band</button>
+      <button class="btn sm" id="resetBands">Reset to ${Y.year} Revenue figures</button>
+      <div class="spacer"></div>
+      <button class="btn" id="addPerson">+ Add person</button>
+    </div>
+    <div class="note">Rates as published for ${Y.year}: 20/40% income tax, USC 0.5/2/3/8%, PRSI 4.2% rising to 4.35% from October. Edit anything above if your circumstances differ - this is an estimate, not a payslip.</div>
+  </div>
+  ${cards}`;
+
+  wireFields(el);
+  $('#addPerson').onclick = ()=>{
+    const p = presetFor(Y.year);
+    Y.people.push({id:uid(), name:'Person '+(Y.people.length+1), gross:0, pensionPct:0, avcMonthly:0,
+      bikMonthly:0, srcop:p.srcopSingle, bonus:0,
+      credits:[{name:'Personal Tax Credit',amount:p.personalCredit},{name:'Employee Tax Credit',amount:p.employeeCredit}]});
+    save(); render();
+  };
+  $$('[data-del-person]',el).forEach(x=> x.onclick=()=>{ Y.people.splice(+x.dataset.delPerson,1); save(); render(); });
+  $$('[data-add-credit]',el).forEach(x=> x.onclick=()=>{
+    Y.people[+x.dataset.addCredit].credits.push({name:'Credit',amount:0}); save(); render(); });
+  $$('[data-del-credit]',el).forEach(x=> x.onclick=()=>{
+    const [pi,ci] = x.dataset.delCredit.split('.').map(Number);
+    Y.people[pi].credits.splice(ci,1); save(); render(); });
+  $$('[data-del-usc]',el).forEach(x=> x.onclick=()=>{ Y.taxBands.uscBands.splice(+x.dataset.delUsc,1); save(); render(); });
+  $('#addUsc').onclick = ()=>{ Y.taxBands.uscBands.push({to:1e12, rate:.08}); save(); render(); };
+  $('#resetBands').onclick = ()=>{ Y.taxBands = presetFor(Y.year); save(); render(); toast('Tax bands reset'); };
+}
+
+/* ---------------- loans ---------------- */
+function renderLoans(el){
+  if(!Y.loans.length){
+    el.innerHTML = `<div class="card"><h2>Loans</h2>
+      <div class="empty">No loans tracked. Add one to model repayments, overpayments and interest saved.</div>
+      <button class="btn primary" id="addLoan">+ Add loan</button></div>`;
+    $('#addLoan').onclick = addLoan; return;
+  }
+  el.innerHTML = Y.loans.map((l,i)=>{
+    const orig = amortise(l,false), prop = amortise(l,true);
+    const calc = calcRepayment(l);
+    const saveInt = orig.interest - prop.interest;
+    const sooner = orig.payments - prop.payments;
+    return `<div class="card">
+      <div class="row" style="margin-bottom:10px">
+        <label class="f" style="flex:1;min-width:160px"><span>Loan</span><input data-path="loans.${i}.name" value="${esc(l.name)}"></label>
+        <button class="btn sm danger" data-del-loan="${i}">x</button>
+      </div>
+      <div class="grid g4">
+        <label class="f"><span>Opening balance</span><input class="num" data-path="loans.${i}.opening" data-type="number" value="${num(l.opening)}"></label>
+        <label class="f"><span>Interest rate %</span><input class="num" data-path="loans.${i}.rate" data-type="number" step="0.01" value="${num(l.rate)}"></label>
+        <label class="f"><span>Frequency</span><select data-path="loans.${i}.freq">${Object.keys(FREQ).map(f=>`<option ${f===l.freq?'selected':''}>${f}</option>`).join('')}</select></label>
+        <label class="f"><span>Start date</span><input type="date" data-path="loans.${i}.startDate" value="${l.startDate||''}"></label>
+        <label class="f"><span>Current repayment</span><input class="num" data-path="loans.${i}.repayment" data-type="number" value="${num(l.repayment)}"></label>
+        <label class="f"><span>Proposed repayment</span><input class="num" data-path="loans.${i}.proposedRepayment" data-type="number" value="${num(l.proposedRepayment)}"></label>
+        <label class="f"><span>Target end date</span><input type="date" data-path="loans.${i}.endDate" value="${l.endDate||''}"></label>
+        <label class="f"><span>PPI on loan</span><select data-path="loans.${i}.ppi" data-type="bool">
+          <option value="">No</option><option value="1" ${l.ppi?'selected':''}>Yes (7.99%)</option></select></label>
+      </div>
+      ${calc? `<div class="note">To clear by the target date the repayment would need to be <b>${fmt(calc)}</b> per ${l.freq.toLowerCase().replace('ly','')}.</div>`:''}
+
+      <div class="grid g4" style="margin:12px 0">
+        <div class="kpi"><div class="lbl">Interest - current</div><div class="val">${fmt0(orig.interest)}</div><div class="sub">${orig.payments} payments to ${orig.end}</div></div>
+        <div class="kpi"><div class="lbl">Interest - proposed</div><div class="val">${fmt0(prop.interest)}</div><div class="sub">${prop.payments} payments to ${prop.end}</div></div>
+        <div class="kpi"><div class="lbl">Interest saved</div><div class="val ${saveInt>0?'pos':''}">${fmt0(saveInt)}</div><div class="sub">${sooner>0?sooner+' payments sooner':'no change'}</div></div>
+        <div class="kpi"><div class="lbl">Total to pay</div><div class="val">${fmt0(prop.paid)}</div><div class="sub">was ${fmt0(orig.paid)}</div></div>
+      </div>
+
+      <div class="chartbox" style="height:280px"><canvas id="cLoan${i}"></canvas></div>
+      ${legendHtml([{label:'Current schedule',color:PALETTE[2]},{label:'Proposed',color:PALETTE[0]}])}
+
+      <details style="margin-top:10px"><summary>Schedule &amp; one-off overpayments (${prop.rows.length} rows)</summary>
+        <div class="tw" style="max-height:340px;overflow:auto;margin-top:8px"><table>
+          <thead><tr><th class="n">#</th><th>Date</th><th class="n">Opening</th><th class="n">Interest</th>
+            <th class="n">Principal</th><th class="n">Payment</th><th class="n">Balance</th><th class="n">Extra</th></tr></thead>
+          <tbody>${prop.rows.map(r=>`<tr>
+            <td class="n">${r.n}</td><td>${r.date}</td><td class="n">${fmt(r.opening)}</td>
+            <td class="n">${fmt(r.interest)}</td><td class="n">${fmt(r.principal)}</td>
+            <td class="n">${fmt(r.payment)}</td><td class="n">${fmt(r.balance)}</td>
+            <td class="n"><input class="num" style="text-align:right;width:80px" data-extra="${i}.${r.n}" value="${num((l.extras||{})[r.n])||''}"></td>
+          </tr>`).join('')}</tbody>
+        </table></div>
+      </details>
+      <div class="row" style="margin-top:10px">
+        <button class="btn sm" data-export-loan="${i}">Export schedule CSV</button>
+      </div>
+    </div>`;
+  }).join('') + `<button class="btn primary" id="addLoan">+ Add loan</button>`;
+
+  wireFields(el);
+  $('#addLoan').onclick = addLoan;
+  $$('[data-del-loan]',el).forEach(x=> x.onclick=()=>{ Y.loans.splice(+x.dataset.delLoan,1); save(); render(); });
+  $$('[data-extra]',el).forEach(x=> x.onchange=()=>{
+    const [li,n] = x.dataset.extra.split('.');
+    const l = Y.loans[+li]; l.extras = l.extras||{};
+    const v = num(x.value);
+    if(v) l.extras[n]=v; else delete l.extras[n];
+    save(); render();
+  });
+  $$('[data-export-loan]',el).forEach(x=> x.onclick=()=>{
+    const l = Y.loans[+x.dataset.exportLoan];
+    downloadCSV(slug(l.name)+'-schedule.csv', loanCSV(l));
+  });
+  Y.loans.forEach((l,i)=> chart(()=>{
+    const o = amortise(l,false), p = amortise(l,true);
+    const n = Math.max(o.rows.length, p.rows.length);
+    const labels = Array.from({length:n},(_,k)=> (o.rows[k]||p.rows[k]).date.slice(0,7));
+    const pad = (rows)=> Array.from({length:n},(_,k)=> rows[k]? rows[k].balance : 0);
+    lineChart($('#cLoan'+i), labels, [
+      {name:'Current', color:PALETTE[2], values:pad(o.rows)},
+      {name:'Proposed', color:PALETTE[0], values:pad(p.rows), fill:true}
+    ]);
+  }));
+}
+function addLoan(){
+  Y.loans.push({id:uid(), name:'New loan', opening:0, rate:5, freq:'Monthly',
+    repayment:0, proposedRepayment:0, startDate:iso(new Date()), endDate:'', ppi:false, extras:{}});
+  save(); render();
+}
+
+/* ---------------- bank ---------------- */
+function renderBank(el){
+  const rows = budgetVsActual();
+  const {months,weeks} = analysisRange();
+  const cats = Array.from(new Set([...Y.bills.map(b=>b.name), ...Y.rules.map(r=>r.category)])).filter(Boolean).sort();
+  const uncatDescs = {};
+  Y.txns.filter(t=>!t.category).forEach(t=>{ uncatDescs[t.desc]=(uncatDescs[t.desc]||0)+1; });
+  const uncatList = Object.entries(uncatDescs).sort((a,b)=>b[1]-a[1]);
+
+  const totalSpend = rows.reduce((s,r)=>s+r.spend,0);
+  const totalBudget = rows.reduce((s,r)=>s+r.budgetPeriod,0);
+
+  el.innerHTML = `
+  <div class="card">
+    <h2>Statement import</h2>
+    <div class="row">
+      <label class="f" style="flex:1;min-width:220px"><span>CSV file (AIB export or any bank CSV)</span>
+        <input type="file" id="csvFile" accept=".csv,text/csv"></label>
+      <label class="f"><span>On import</span>
+        <select id="importMode"><option value="append">Add to existing</option><option value="replace">Replace all</option></select></label>
+    </div>
+    <div class="note">Columns are matched by header name - date, description, debit, credit, balance. Everything is parsed in this browser; nothing is uploaded.</div>
+  </div>
+
+  <div class="card">
+    <h2>Analysis period</h2>
+    <div class="row">
+      <label class="f"><span>From</span><input type="date" data-path="analysis.from" value="${Y.analysis.from}"></label>
+      <label class="f"><span>To</span><input type="date" data-path="analysis.to" value="${Y.analysis.to}"></label>
+      <div class="spacer"></div>
+      <div class="kpi"><div class="lbl">Period</div><div class="val">${months} mo</div><div class="sub">${weeks.toFixed(1)} weeks</div></div>
+      <div class="kpi"><div class="lbl">Spend</div><div class="val">${fmt0(totalSpend)}</div><div class="sub">${fmt0(totalSpend/months)} / month</div></div>
+      <div class="kpi"><div class="lbl">vs budget</div><div class="val ${totalSpend>totalBudget?'neg':'pos'}">${fmt0(totalSpend-totalBudget)}</div><div class="sub">budget ${fmt0(totalBudget)}</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Category summary</h2>
+    <div class="tw"><table>
+      <thead><tr><th>Category</th><th class="n">Spend</th><th class="n">Weekly avg</th><th class="n">Monthly avg</th>
+        <th class="n">Monthly budget</th><th class="n">Over / under</th><th>Budget used</th><th class="n">Txns</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr>
+        <td>${esc(r.category)} ${r.tracked?'':'<span class="pill">unbudgeted</span>'}</td>
+        <td class="n">${fmt(r.spend)}</td>
+        <td class="n">${fmt(r.weeklyActual)}</td>
+        <td class="n">${fmt(r.monthlyActual)}</td>
+        <td class="n">${r.monthlyBudget?fmt(r.monthlyBudget):'<span class="mut">-</span>'}</td>
+        <td class="n ${r.varMonthly>0?'neg':'pos'}">${r.monthlyBudget?fmt(r.varMonthly):'<span class="mut">-</span>'}</td>
+        <td>${r.monthlyBudget?barHtml(r.usePct):''}</td>
+        <td class="n mut">${r.count}</td></tr>`).join('')
+        || '<tr><td colspan="8" class="empty">Import a statement to see spending by category.</td></tr>'}</tbody>
+      <tfoot><tr><td>Total</td><td class="n">${fmt(totalSpend)}</td><td class="n">${fmt(totalSpend/weeks)}</td>
+        <td class="n">${fmt(totalSpend/months)}</td><td class="n">${fmt(totalBudget/months)}</td>
+        <td class="n ${totalSpend>totalBudget?'neg':'pos'}">${fmt((totalSpend-totalBudget)/months)}</td><td colspan="2"></td></tr></tfoot>
+    </table></div>
+    <div class="row" style="margin-top:10px"><button class="btn" id="exportAnalysis">Export CSV</button></div>
+  </div>
+
+  <div class="card">
+    <h2>Category rules <span class="pill">${Y.rules.length}</span></h2>
+    <div class="note" style="margin-top:0">A transaction is matched when its description contains the text below. Longest match wins.</div>
+    <div class="tw" style="max-height:320px;overflow:auto"><table>
+      <thead><tr><th>Description contains</th><th>Category</th><th></th></tr></thead>
+      <tbody>${Y.rules.map((r,i)=>`<tr>
+        <td><input data-path="rules.${i}.match" data-norender value="${esc(r.match)}"></td>
+        <td><input list="catList" data-path="rules.${i}.category" data-norender value="${esc(r.category)}"></td>
+        <td class="act"><button class="btn sm danger" data-del-rule="${i}">x</button></td></tr>`).join('')
+        || '<tr><td colspan="3" class="empty">No rules yet.</td></tr>'}</tbody>
+    </table></div>
+    <datalist id="catList">${cats.map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" id="addRule">+ Add rule</button>
+      <button class="btn" id="applyRules">Apply rules to all</button>
+      <button class="btn" id="exportRules">Export CSV</button>
+    </div>
+    ${uncatList.length?`<details style="margin-top:12px"><summary>${uncatList.length} unmatched description${uncatList.length===1?'':'s'}</summary>
+      <div class="tw" style="max-height:260px;overflow:auto;margin-top:8px"><table>
+        <thead><tr><th>Description</th><th class="n">Count</th><th>Assign category</th></tr></thead>
+        <tbody>${uncatList.map(([d,n],i)=>`<tr><td>${esc(d)}</td><td class="n">${n}</td>
+          <td><input list="catList" data-quickrule="${esc(d)}" placeholder="category"></td></tr>`).join('')}</tbody>
+      </table></div></details>`:''}
+  </div>
+
+  <div class="card">
+    <h2>Transactions <span class="pill">${Y.txns.length}</span></h2>
+    <div class="row" style="margin-bottom:8px">
+      <input id="txnFilter" placeholder="Filter description or category" style="max-width:280px">
+      <div class="spacer"></div>
+      <button class="btn" id="exportTxns">Export CSV</button>
+      <button class="btn danger" id="clearTxns">Clear all</button>
+    </div>
+    <div class="tw" style="max-height:460px;overflow:auto"><table id="txnTable">
+      <thead><tr><th>Date</th><th>Description</th><th class="n">Debit</th><th class="n">Credit</th><th class="n">Balance</th><th>Category</th></tr></thead>
+      <tbody>${txnRows()}</tbody>
+    </table></div>
+  </div>`;
+
+  wireFields(el);
+  $('#csvFile').onchange = e=>{
+    const f = e.target.files[0]; if(!f) return;
+    const rd = new FileReader();
+    rd.onload = ()=>{ importStatement(rd.result, $('#importMode').value); };
+    rd.readAsText(f);
+  };
+  $('#addRule').onclick = ()=>{ Y.rules.unshift({match:'',category:''}); save(); render(); };
+  $$('[data-del-rule]',el).forEach(x=> x.onclick=()=>{ Y.rules.splice(+x.dataset.delRule,1); save(); render(); });
+  $('#applyRules').onclick = ()=>{ const n = applyRules(true); save(); render(); toast(n+' transactions categorised'); };
+  $$('[data-quickrule]',el).forEach(x=> x.onchange=()=>{
+    const cat = x.value.trim(); if(!cat) return;
+    Y.rules.push({match:x.dataset.quickrule, category:cat});
+    applyRules(false); save(); render();
+  });
+  $$('[data-txncat]',el).forEach(x=> x.onchange=()=>{
+    Y.txns[+x.dataset.txncat].category = x.value; save(); render();
+  });
+  $('#txnFilter').oninput = e=>{
+    const q = e.target.value.toLowerCase();
+    $$('#txnTable tbody tr').forEach(tr=>{
+      tr.style.display = tr.textContent.toLowerCase().includes(q)?'':'none';
+    });
+  };
+  $('#clearTxns').onclick = ()=>{ if(confirm('Remove all '+Y.txns.length+' transactions for '+Y.year+'?')){ Y.txns=[]; save(); render(); } };
+  $('#exportTxns').onclick = ()=> downloadCSV('transactions-'+Y.year+'.csv', txnCSV());
+  $('#exportAnalysis').onclick = ()=> downloadCSV('analysis-'+Y.year+'.csv', analysisCSV());
+  $('#exportRules').onclick = ()=> downloadCSV('rules-'+Y.year+'.csv', rulesCSV());
+}
+function txnRows(){
+  const cats = Array.from(new Set([...Y.bills.map(b=>b.name), ...Y.rules.map(r=>r.category)])).filter(Boolean).sort();
+  return Y.txns.slice().map((t,i)=>({t,i}))
+    .sort((a,b)=> (a.t.date<b.t.date?1:-1))
+    .slice(0,800)
+    .map(({t,i})=>`<tr>
+      <td>${esc(t.date)}</td><td>${esc(t.desc)}</td>
+      <td class="n">${t.debit?fmt(num(t.debit)):''}</td>
+      <td class="n pos">${t.credit?fmt(num(t.credit)):''}</td>
+      <td class="n mut">${t.balance!==''&&t.balance!=null?fmt(num(t.balance)):''}</td>
+      <td><input list="catList" data-txncat="${i}" value="${esc(t.category||'')}" style="min-width:120px"></td>
+    </tr>`).join('') || '<tr><td colspan="6" class="empty">No transactions.</td></tr>';
+}
+function parseCSV(text){
+  const rows=[]; let row=[], cell='', q=false;
+  text = text.replace(/^\uFEFF/,'');
+  for(let i=0;i<text.length;i++){
+    const ch = text[i];
+    if(q){
+      if(ch==='"'){ if(text[i+1]==='"'){ cell+='"'; i++; } else q=false; }
+      else cell+=ch;
+    } else {
+      if(ch==='"') q=true;
+      else if(ch===','){ row.push(cell); cell=''; }
+      else if(ch==='\n'){ row.push(cell); rows.push(row); row=[]; cell=''; }
+      else if(ch==='\r'){}
+      else cell+=ch;
+    }
+  }
+  if(cell.length||row.length){ row.push(cell); rows.push(row); }
+  return rows.filter(r=> r.some(c=>String(c).trim()!==''));
+}
+function findCol(headers, ...keys){
+  for(const k of keys){
+    const i = headers.findIndex(h=> h.toLowerCase().replace(/[^a-z0-9]/g,'').includes(k));
+    if(i>=0) return i;
+  }
+  return -1;
+}
+function importStatement(text, mode){
+  const rows = parseCSV(text);
+  if(rows.length<2){ toast('Could not read that CSV'); return; }
+  const head = rows[0].map(h=>String(h).trim());
+  const ci = {
+    date: findCol(head,'date'),
+    d1: findCol(head,'description1','description','details','narrative','reference'),
+    d2: findCol(head,'description2'),
+    d3: findCol(head,'description3'),
+    debit: findCol(head,'debitamount','debit','withdrawal','moneyout','paidout'),
+    credit: findCol(head,'creditamount','credit','deposit','moneyin','paidin'),
+    amount: findCol(head,'amount','value'),
+    balance: findCol(head,'balance'),
+    type: findCol(head,'transactiontype','type')
+  };
+  if(ci.date<0 || ci.d1<0){ toast('Need at least a date and description column'); return; }
+  const out=[];
+  for(let r=1;r<rows.length;r++){
+    const c = rows[r];
+    const d = parseDate(normDate(c[ci.date]));
+    if(!d) continue;
+    let debit = ci.debit>=0? num(c[ci.debit]) : 0;
+    let credit = ci.credit>=0? num(c[ci.credit]) : 0;
+    if(ci.debit<0 && ci.credit<0 && ci.amount>=0){
+      const a = num(c[ci.amount]);
+      if(a<0) debit = Math.abs(a); else credit = a;
+    }
+    out.push({
+      date: iso(d),
+      desc: (c[ci.d1]||'').trim(),
+      desc2: [ci.d2>=0?c[ci.d2]:'', ci.d3>=0?c[ci.d3]:''].filter(Boolean).join(' ').trim(),
+      debit: debit||0, credit: credit||0,
+      balance: ci.balance>=0? num(c[ci.balance]) : '',
+      type: ci.type>=0? (c[ci.type]||'').trim() : '',
+      category: ''
+    });
+  }
+  if(!out.length){ toast('No rows recognised'); return; }
+  if(mode==='replace') Y.txns = out;
+  else {
+    const seen = new Set(Y.txns.map(keyOf));
+    let added=0;
+    out.forEach(t=>{ if(!seen.has(keyOf(t))){ Y.txns.push(t); seen.add(keyOf(t)); added++; } });
+    toast(added+' new transactions added ('+(out.length-added)+' duplicates skipped)');
+  }
+  const n = applyRules(false);
+  save(); render();
+  if(mode==='replace') toast(out.length+' transactions imported, '+n+' categorised');
+}
+const keyOf = t => [t.date,t.desc,t.debit,t.credit,t.balance].join('|');
+function normDate(s){
+  s = String(s||'').trim();
+  const m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+  if(m){ let y=+m[3]; if(y<100) y+=2000; return `${y}-${String(+m[2]).padStart(2,'0')}-${String(+m[1]).padStart(2,'0')}`; }
+  return s;
+}
+
+/* ---------------- savings ---------------- */
+function renderSavings(el){
+  const s = Y.savings;
+  const proj = projectSavings();
+  const monthlyIn = s.accounts.reduce((x,a)=>x+num(a.monthly),0);
+  const now = s.accounts.reduce((x,a)=>x+num(a.opening),0);
+  const end = proj.length? proj[proj.length-1].total : 0;
+
+  el.innerHTML = `
+  <div class="card">
+    <h2>Plan</h2>
+    <div class="row">
+      <label class="f"><span>Start</span><input type="date" data-path="savings.startDate" value="${s.startDate||''}"></label>
+      <label class="f"><span>Months to project</span><input class="num" data-path="savings.months" data-type="number" value="${num(s.months)}"></label>
+      <label class="f"><span>Annual growth %</span><input class="num" data-path="savings.growthPct" data-type="number" step="0.1" value="${num(s.growthPct)}"></label>
+      <div class="spacer"></div>
+      <div class="kpi"><div class="lbl">Saving / month</div><div class="val">${fmt0(monthlyIn)}</div><div class="sub">${fmt0(monthlyIn*12)} a year</div></div>
+      <div class="kpi"><div class="lbl">Balance today</div><div class="val">${fmt0(now)}</div></div>
+      <div class="kpi"><div class="lbl">Projected</div><div class="val pos">${fmt0(end)}</div><div class="sub">${proj.length?proj[proj.length-1].date:''}</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Accounts</h2>
+    <div class="tw"><table>
+      <thead><tr><th>Account</th><th class="n">Opening</th><th class="n">Monthly</th><th class="n">Projected end</th><th></th></tr></thead>
+      <tbody>${s.accounts.map((a,i)=>`<tr>
+        <td><input data-path="savings.accounts.${i}.name" value="${esc(a.name)}"></td>
+        <td class="n"><input class="num" style="text-align:right" data-path="savings.accounts.${i}.opening" data-type="number" value="${num(a.opening)}"></td>
+        <td class="n"><input class="num" style="text-align:right" data-path="savings.accounts.${i}.monthly" data-type="number" value="${num(a.monthly)}"></td>
+        <td class="n">${proj.length?fmt(proj[proj.length-1].values[i]):''}</td>
+        <td class="act"><button class="btn sm danger" data-del-acct="${i}">x</button></td></tr>`).join('')
+        || '<tr><td colspan="5" class="empty">No savings accounts yet.</td></tr>'}</tbody>
+      <tfoot><tr><td>Total</td><td class="n">${fmt(now)}</td><td class="n">${fmt(monthlyIn)}</td><td class="n">${fmt(end)}</td><td></td></tr></tfoot>
+    </table></div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" id="addAcct">+ Add account</button>
+      <button class="btn" id="exportSavings">Export CSV</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Projection</h2>
+    <div class="chartbox" style="height:320px"><canvas id="cProj"></canvas></div>
+    ${legendHtml(s.accounts.slice(0,8).map((a,i)=>({label:a.name,color:PALETTE[i%PALETTE.length]})).concat([{label:'Total',color:css('--text')}]))}
+  </div>
+
+  <div class="card">
+    <h2>Balances by month</h2>
+    <div class="tw" style="max-height:380px;overflow:auto"><table>
+      <thead><tr><th>Month</th>${s.accounts.map(a=>`<th class="n">${esc(a.name)}</th>`).join('')}<th class="n">Total</th></tr></thead>
+      <tbody>${proj.map(r=>`<tr><td>${r.date.slice(0,7)}</td>${r.values.map(v=>`<td class="n">${fmt(v)}</td>`).join('')}
+        <td class="n"><b>${fmt(r.total)}</b></td></tr>`).join('')}</tbody>
+    </table></div>
+  </div>`;
+
+  wireFields(el);
+  $('#addAcct').onclick = ()=>{ s.accounts.push({name:'Account '+(s.accounts.length+1), opening:0, monthly:0, adjust:{}}); save(); render(); };
+  $$('[data-del-acct]',el).forEach(x=> x.onclick=()=>{ s.accounts.splice(+x.dataset.delAcct,1); save(); render(); });
+  $('#exportSavings').onclick = ()=> downloadCSV('savings-'+Y.year+'.csv', savingsCSV());
+  chart(()=>{
+    const series = s.accounts.slice(0,8).map((a,i)=>({name:a.name, color:PALETTE[i%PALETTE.length], values:proj.map(r=>r.values[i])}));
+    series.push({name:'Total', color:css('--text'), values:proj.map(r=>r.total), dash:true});
+    lineChart($('#cProj'), proj.map(r=>r.date.slice(0,7)), series);
+  });
+}
+
+/* ---------------- history ---------------- */
+function renderHistory(el){
+  const h = Y.history;
+  const months = Array.from(new Set(h.map(r=>r.month))).sort();
+  const cats = Array.from(new Set(h.map(r=>r.category))).filter(Boolean).sort();
+  const grid = {};
+  h.forEach(r=>{ grid[r.month] = grid[r.month]||{}; grid[r.month][r.category] = (grid[r.month][r.category]||0)+num(r.amount); });
+  const catTotal = c => h.filter(r=>r.category===c).reduce((s,r)=>s+num(r.amount),0);
+
+  el.innerHTML = `
+  <div class="card">
+    <h2>Historical bill payments</h2>
+    <div class="note" style="margin-top:0">Actuals you have already paid, kept across years. Use it to sanity-check the budget you set for ${Y.year}.</div>
+    <div class="row" style="margin:10px 0">
+      <label class="f" style="width:130px"><span>Month</span><input type="month" id="hMonth" value="${monthKey(new Date())}"></label>
+      <label class="f" style="width:180px"><span>Category</span><input list="catList2" id="hCat" placeholder="Electricity"></label>
+      <label class="f" style="width:120px"><span>Amount</span><input class="num" id="hAmt" value=""></label>
+      <button class="btn" id="hAdd">Add</button>
+      <div class="spacer"></div>
+      <button class="btn" id="hFromTxns">Build from transactions</button>
+      <button class="btn" id="exportHistory">Export CSV</button>
+    </div>
+    <datalist id="catList2">${Y.bills.map(b=>`<option value="${esc(b.name)}">`).join('')}</datalist>
+  </div>
+
+  ${cats.length?`<div class="card">
+    <h2>Trend</h2>
+    <div class="row" style="margin-bottom:8px">
+      <label class="f" style="width:200px"><span>Category</span>
+        <select id="hSel">${cats.map(c=>`<option ${c===(Y._histSel||cats[0])?'selected':''}>${esc(c)}</option>`).join('')}</select></label>
+    </div>
+    <div class="chartbox"><canvas id="cHist"></canvas></div>
+  </div>`:''}
+
+  <div class="card">
+    <h2>Log <span class="pill">${h.length}</span></h2>
+    <div class="tw" style="max-height:480px;overflow:auto"><table>
+      <thead><tr><th>Month</th>${cats.map(c=>`<th class="n">${esc(c)}</th>`).join('')}<th class="n">Total</th></tr></thead>
+      <tbody>${months.slice().reverse().map(m=>{
+        const row = grid[m]||{};
+        const tot = Object.values(row).reduce((a,b)=>a+b,0);
+        return `<tr><td>${m}</td>${cats.map(c=>`<td class="n">${row[c]?fmt(row[c]):'<span class="mut">-</span>'}</td>`).join('')}
+          <td class="n"><b>${fmt(tot)}</b></td></tr>`;
+      }).join('') || `<tr><td colspan="${cats.length+2}" class="empty">Nothing logged yet.</td></tr>`}</tbody>
+      <tfoot><tr><td>Average / month</td>${cats.map(c=>{
+        const ms = months.filter(m=>grid[m]&&grid[m][c]!=null).length||1;
+        return `<td class="n">${fmt(catTotal(c)/ms)}</td>`;
+      }).join('')}<td></td></tr></tfoot>
+    </table></div>
+  </div>`;
+
+  $('#hAdd').onclick = ()=>{
+    const m = $('#hMonth').value, c = $('#hCat').value.trim(), a = num($('#hAmt').value);
+    if(!m||!c){ toast('Month and category needed'); return; }
+    Y.history.push({month:m, category:c, amount:a});
+    save(); render();
+  };
+  $('#hFromTxns').onclick = ()=>{
+    const seen = new Set(Y.history.map(r=>r.month+'|'+r.category));
+    const agg = {};
+    Y.txns.filter(t=>t.category && num(t.debit)>0).forEach(t=>{
+      const k = t.date.slice(0,7)+'|'+t.category;
+      agg[k] = (agg[k]||0)+num(t.debit);
+    });
+    let n=0;
+    Object.entries(agg).forEach(([k,v])=>{
+      if(seen.has(k)) return;
+      const [month,category]=k.split('|');
+      Y.history.push({month, category, amount:round2(v)}); n++;
+    });
+    save(); render(); toast(n+' months added from transactions');
+  };
+  $('#exportHistory').onclick = ()=> downloadCSV('history-'+Y.year+'.csv', historyCSV());
+  const sel = $('#hSel');
+  if(sel){
+    sel.onchange = ()=>{ Y._histSel = sel.value; render(); };
+    chart(()=>{
+      const c = Y._histSel||cats[0];
+      const ms = months.filter(m=>grid[m]&&grid[m][c]!=null);
+      lineChart($('#cHist'), ms, [{name:c, color:PALETTE[0], values:ms.map(m=>grid[m][c]), fill:true}]);
+    });
+  }
+}
+
+/* ---------------- export helpers ---------------- */
+const slug = s => String(s||'sheet').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'sheet';
+function toCSV(rows){
+  return rows.map(r=> r.map(c=>{
+    const s = (c===null||c===undefined)?'':String(c);
+    return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+  }).join(',')).join('\r\n');
+}
+function downloadBlob(name, blob){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download=name; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); },500);
+}
+function downloadCSV(name, rows){ downloadBlob(name, new Blob(['\uFEFF'+toCSV(rows)],{type:'text/csv;charset=utf-8'})); }
+function downloadText(name, text, type){ downloadBlob(name, new Blob([text],{type:type||'application/json'})); }
+
+/* sheet builders - shared by CSV and XLSX export */
+function billsCSV(){
+  const rows=[['Bill','Frequency','Holder','Amount','Annual','Monthly','Weekly','Next due']];
+  Y.bills.forEach(b=>{ const a=annualOf(b);
+    rows.push([b.name,b.freq,b.holder,num(b.amount),round2(a),round2(a/12),round2(a/52),b.nextDue||'']); });
+  const t=billTotals();
+  rows.push(['Total','','',round2(Y.bills.reduce((s,b)=>s+num(b.amount),0)),round2(t.annual),round2(t.monthly),round2(t.weekly),'']);
+  return rows;
+}
+function taxCSV(){
+  const b=Y.taxBands;
+  const rows=[['Person','Gross','BIK','Pension','AVC','Taxable','Tax 20%','Tax 40%','Credits','PAYE','PRSI','USC','Deductions','Net annual','Net monthly','Effective %']];
+  Y.people.forEach(p=>{ const t=calcTax(p,b);
+    rows.push([p.name,round2(t.gross),round2(t.bik),round2(t.pension),round2(t.avc),round2(t.taxable),
+      round2(t.tax20),round2(t.tax40),round2(t.credits),round2(t.paye),round2(t.prsi),round2(t.usc),
+      round2(t.deductions),round2(t.net),round2(t.netMonthly),round2(t.effective)]); });
+  return rows;
+}
+function analysisCSV(){
+  const rows=[['Category','Spend','Weekly average','Monthly average','Monthly budget','Over/under monthly','Annual budget','Over/under period','Budget used %','Transactions']];
+  budgetVsActual().forEach(r=> rows.push([r.category,round2(r.spend),round2(r.weeklyActual),round2(r.monthlyActual),
+    round2(r.monthlyBudget),round2(r.varMonthly),round2(r.budgetAnnual),round2(r.varPeriod),round2(r.usePct),r.count]));
+  return rows;
+}
+function txnCSV(){
+  const rows=[['Date','Description','Detail','Debit','Credit','Balance','Type','Category']];
+  Y.txns.forEach(t=> rows.push([t.date,t.desc,t.desc2||'',num(t.debit),num(t.credit),t.balance===''?'':num(t.balance),t.type||'',t.category||'']));
+  return rows;
+}
+function rulesCSV(){
+  const rows=[['Description contains','Category']];
+  Y.rules.forEach(r=> rows.push([r.match,r.category]));
+  return rows;
+}
+function savingsCSV(){
+  const proj = projectSavings();
+  const rows=[['Month', ...Y.savings.accounts.map(a=>a.name), 'Total']];
+  proj.forEach(r=> rows.push([r.date, ...r.values.map(v=>round2(v)), round2(r.total)]));
+  return rows;
+}
+function historyCSV(){
+  const rows=[['Month','Category','Amount']];
+  Y.history.slice().sort((a,b)=> a.month<b.month?-1:1).forEach(r=> rows.push([r.month,r.category,num(r.amount)]));
+  return rows;
+}
+function loanCSV(l){
+  const o=amortise(l,false), p=amortise(l,true);
+  const rows=[['Payment','Date','Opening','Interest','Principal','Repayment','Balance','Extra']];
+  p.rows.forEach(r=> rows.push([r.n,r.date,r.opening,r.interest,r.principal,r.payment,r.balance,r.extra||0]));
+  rows.push([]);
+  rows.push(['Current schedule','Interest',o.interest,'Payments',o.payments,'Ends',o.end]);
+  rows.push(['Proposed schedule','Interest',p.interest,'Payments',p.payments,'Ends',p.end]);
+  rows.push(['Saving','Interest',round2(o.interest-p.interest),'Payments sooner',o.payments-p.payments]);
+  return rows;
+}
+function loansSummaryCSV(){
+  const rows=[['Loan','Opening','Rate %','Frequency','Repayment','Proposed','Interest now','Interest proposed','Interest saved','Payments now','Payments proposed','Ends']];
+  Y.loans.forEach(l=>{ const o=amortise(l,false), p=amortise(l,true);
+    rows.push([l.name,num(l.opening),num(l.rate),l.freq,num(l.repayment),num(l.proposedRepayment),
+      o.interest,p.interest,round2(o.interest-p.interest),o.payments,p.payments,p.end]); });
+  return rows;
+}
+function allSheets(){
+  const s = [
+    {name:'Budget', rows:billsCSV()},
+    {name:'Tax', rows:taxCSV()},
+    {name:'Bank Analysis', rows:analysisCSV()},
+    {name:'Transactions', rows:txnCSV()},
+    {name:'Rules', rows:rulesCSV()},
+    {name:'Savings', rows:savingsCSV()},
+    {name:'History', rows:historyCSV()}
+  ];
+  if(Y.loans.length) s.push({name:'Loans', rows:loansSummaryCSV()});
+  Y.loans.forEach(l=> s.push({name:('Loan '+l.name).slice(0,28), rows:loanCSV(l)}));
+  return s;
+}
+
+/* ---------------- minimal xlsx writer (store-only zip, inline strings) ---------------- */
+const CRC_TABLE = (()=>{ const t=new Uint32Array(256);
+  for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c = c&1 ? 0xEDB88320^(c>>>1) : c>>>1; t[n]=c>>>0; }
+  return t; })();
+function crc32(buf){ let c=0xFFFFFFFF; for(let i=0;i<buf.length;i++) c = CRC_TABLE[(c^buf[i])&0xFF]^(c>>>8); return (c^0xFFFFFFFF)>>>0; }
+const enc = s => new TextEncoder().encode(s);
+function zipStore(files){
+  const chunks=[], central=[]; let offset=0;
+  const dv = n => { const b=new Uint8Array(4); new DataView(b.buffer).setUint32(0,n,true); return b; };
+  const sv = n => { const b=new Uint8Array(2); new DataView(b.buffer).setUint16(0,n,true); return b; };
+  for(const f of files){
+    const name = enc(f.name), data = f.data;
+    const crc = crc32(data);
+    const local = [enc('PK\x03\x04'), sv(20), sv(0), sv(0), sv(0), sv(0), dv(crc), dv(data.length), dv(data.length), sv(name.length), sv(0), name, data];
+    local.forEach(x=>chunks.push(x));
+    central.push([enc('PK\x01\x02'), sv(20), sv(20), sv(0), sv(0), sv(0), sv(0), dv(crc), dv(data.length), dv(data.length),
+      sv(name.length), sv(0), sv(0), sv(0), sv(0), dv(0), dv(offset), name]);
+    offset += 30 + name.length + data.length;
+  }
+  const cdStart = offset; let cdSize = 0;
+  central.forEach(parts=>{ parts.forEach(p=>{ chunks.push(p); cdSize += p.length; }); });
+  chunks.push(enc('PK\x05\x06'), sv(0), sv(0), sv(files.length), sv(files.length), dv(cdSize), dv(cdStart), sv(0));
+  let total=0; chunks.forEach(c=>total+=c.length);
+  const out = new Uint8Array(total); let pos=0;
+  chunks.forEach(c=>{ out.set(c,pos); pos+=c.length; });
+  return out;
+}
+const xmlEsc = s => String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[m]));
+function colName(i){ let s=''; i++; while(i>0){ const r=(i-1)%26; s=String.fromCharCode(65+r)+s; i=Math.floor((i-1)/26); } return s; }
+function sheetXml(rows){
+  const body = rows.map((r,ri)=>{
+    const cells = r.map((v,ci)=>{
+      const ref = colName(ci)+(ri+1);
+      if(v===null||v===undefined||v==='') return '';
+      if(typeof v==='number' && isFinite(v)) return `<c r="${ref}"><v>${v}</v></c>`;
+      return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${xmlEsc(v)}</t></is></c>`;
+    }).join('');
+    return `<row r="${ri+1}">${cells}</row>`;
+  }).join('');
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${body}</sheetData></worksheet>`;
+}
+function buildXlsx(sheets){
+  const names = [], used = new Set();
+  sheets.forEach(s=>{
+    let n = String(s.name).replace(/[\\\/\?\*\[\]:]/g,'-').slice(0,31) || 'Sheet';
+    let base=n, k=2; while(used.has(n)){ n = (base.slice(0,28)+' '+k++); }
+    used.add(n); names.push(n);
+  });
+  const files = [];
+  files.push({name:'[Content_Types].xml', data:enc(
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+${sheets.map((s,i)=>`<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}
+</Types>`)});
+  files.push({name:'_rels/.rels', data:enc(
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`)});
+  files.push({name:'xl/workbook.xml', data:enc(
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheets>${names.map((n,i)=>`<sheet name="${xmlEsc(n)}" sheetId="${i+1}" r:id="rId${i+1}"/>`).join('')}</sheets>
+</workbook>`)});
+  files.push({name:'xl/_rels/workbook.xml.rels', data:enc(
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+${names.map((n,i)=>`<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i+1}.xml"/>`).join('')}
+</Relationships>`)});
+  sheets.forEach((s,i)=> files.push({name:`xl/worksheets/sheet${i+1}.xml`, data:enc(sheetXml(s.rows))}));
+  return zipStore(files);
+}
+function downloadXlsx(name, sheets){
+  downloadBlob(name, new Blob([buildXlsx(sheets)],
+    {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+}
+
+/* ---------------- data tab ---------------- */
+function renderData(el){
+  const size = (()=>{ try{ return (new Blob([JSON.stringify(DB)]).size/1024).toFixed(1)+' KB'; }catch(e){ return '?'; } })();
+  el.innerHTML = `
+  <div class="card">
+    <h2>This year - ${Y.year}</h2>
+    <div class="row">
+      <button class="btn primary" id="expXlsx">Download workbook (.xlsx)</button>
+      <button class="btn" id="expJson">Download ${Y.year} JSON</button>
+      <button class="btn" id="expAllCsv">Download every sheet as CSV</button>
+    </div>
+    <div class="note">The workbook contains one sheet per section: budget, tax, bank analysis, transactions, rules, savings, history and each loan schedule.</div>
+  </div>
+
+  <div class="card">
+    <h2>Backup &amp; restore</h2>
+    <div class="row">
+      <button class="btn" id="expAll">Download all years (JSON)</button>
+      <label class="f" style="flex:1;min-width:220px;margin:0"><span>Restore from JSON</span>
+        <input type="file" id="impJson" accept=".json,application/json"></label>
+    </div>
+    <div class="note">A single-year file loads into that year; an all-years file replaces everything. Local storage in use: ${size}.</div>
+  </div>
+
+  <div class="card">
+    <h2>Years</h2>
+    <div class="tw"><table>
+      <thead><tr><th>Year</th><th class="n">Bills</th><th class="n">Loans</th><th class="n">Transactions</th><th class="n">Budget /mo</th><th></th></tr></thead>
+      <tbody>${Object.keys(DB.years).sort().map(y=>{
+        const d = DB.years[y];
+        const ann = d.bills.reduce((s,b)=> s+num(b.amount)*(FREQ[b.freq]||12), 0);
+        return `<tr><td>${y} ${y===DB.active?'<span class="pill on">active</span>':''}</td>
+          <td class="n">${d.bills.length}</td><td class="n">${d.loans.length}</td><td class="n">${d.txns.length}</td>
+          <td class="n">${fmt(ann/12)}</td>
+          <td class="act">${Object.keys(DB.years).length>1?`<button class="btn sm danger" data-del-year="${y}">Delete</button>`:''}</td></tr>`;
+      }).join('')}</tbody>
+    </table></div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" id="newYear2">+ New year from ${Y.year}</button>
+      <div class="spacer"></div>
+      <label class="f" style="width:110px;margin:0"><span>Currency</span><input data-path="currency" value="${esc(Y.currency||'€')}"></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Danger zone</h2>
+    <button class="btn danger" id="wipe">Erase everything in this browser</button>
+    <div class="note">Data lives only in this browser's local storage. Clearing site data removes it. Keep a JSON backup.</div>
+  </div>`;
+
+  wireFields(el);
+  $('#expXlsx').onclick = ()=>{ downloadXlsx('finances-'+Y.year+'.xlsx', allSheets()); toast('Workbook downloaded'); };
+  $('#expJson').onclick = ()=> downloadText('ledger-'+Y.year+'.json', JSON.stringify({kind:'ledger-year', year:Y.year, data:Y}, null, 2));
+  $('#expAll').onclick = ()=> downloadText('ledger-all-years.json', JSON.stringify(DB, null, 2));
+  $('#expAllCsv').onclick = ()=>{
+    const s = allSheets();
+    s.forEach((sh,i)=> setTimeout(()=> downloadCSV(slug(sh.name)+'-'+Y.year+'.csv', sh.rows), i*350));
+    toast('Downloading '+s.length+' files');
+  };
+  $('#impJson').onchange = e=>{
+    const f = e.target.files[0]; if(!f) return;
+    const rd = new FileReader();
+    rd.onload = ()=>{
+      try{
+        const j = JSON.parse(rd.result);
+        if(j.kind==='ledger-year' && j.data){
+          DB.years[String(j.year)] = j.data; DB.active = String(j.year);
+        } else if(j.years){
+          DB = j; if(!DB.years[DB.active]) DB.active = Object.keys(DB.years)[0];
+        } else { toast('Unrecognised file'); return; }
+        Y = DB.years[DB.active]; CUR = Y.currency||'€';
+        save(); render(); toast('Restored');
+      }catch(err){ toast('That file would not parse'); }
+    };
+    rd.readAsText(f);
+  };
+  $$('[data-del-year]',el).forEach(x=> x.onclick=()=>{
+    const y = x.dataset.delYear;
+    if(!confirm('Delete '+y+' permanently?')) return;
+    delete DB.years[y];
+    if(DB.active===y) DB.active = Object.keys(DB.years).sort()[0];
+    Y = DB.years[DB.active]; save(); render();
+  });
+  $('#newYear2').onclick = newYear;
+  $('#wipe').onclick = ()=>{
+    if(!confirm('Erase all years from this browser? Export a backup first.')) return;
+    localStorage.removeItem(KEY); load(); render(); toast('Cleared');
+  };
+}
+
+/* ---------------- year management ---------------- */
+function newYear(){
+  const years = Object.keys(DB.years).map(Number);
+  const suggested = Math.max(...years)+1;
+  const input = prompt('New year to create (bills, loans, savings and rules carry over):', suggested);
+  if(!input) return;
+  const y = parseInt(input,10);
+  if(!y || y<1990 || y>2200){ toast('Enter a year like '+suggested); return; }
+  if(DB.years[y] && !confirm(y+' already exists. Overwrite it?')) return;
+  const src = Y;
+  const seed = {
+    people: JSON.parse(JSON.stringify(src.people)),
+    bills: JSON.parse(JSON.stringify(src.bills)),
+    loans: JSON.parse(JSON.stringify(src.loans)),
+    savings: JSON.parse(JSON.stringify(src.savings)),
+    rules: JSON.parse(JSON.stringify(src.rules)),
+    history: JSON.parse(JSON.stringify(src.history))
+  };
+  const nd = blankYear(y, seed);
+  const p = presetFor(y);
+  nd.people.forEach(pp=>{
+    pp.srcop = p.srcopSingle;
+    (pp.credits||[]).forEach(c=>{
+      if(/personal/i.test(c.name)) c.amount = p.personalCredit;
+      if(/employee|paye/i.test(c.name)) c.amount = p.employeeCredit;
+    });
+  });
+  nd.savings.startDate = y+'-01-01';
+  nd.splitMode = src.splitMode; nd.splitManual = JSON.parse(JSON.stringify(src.splitManual||{}));
+  nd.currency = src.currency;
+  DB.years[String(y)] = nd;
+  DB.active = String(y);
+  Y = nd; save(); render();
+  toast(y+' created - transactions start empty');
+}
+
+/* ---------------- init ---------------- */
+function applyTheme(){
+  document.documentElement.dataset.theme = DB.theme||'dark';
+  $('#themeBtn').textContent = (DB.theme==='light')?'Dark':'Light';
+}
+function init(){
+  load();
+  applyTheme();
+  render();
+  $('#tabs').addEventListener('click', e=>{ const b=e.target.closest('button'); if(b) go(b.dataset.tab); });
+  $('#yearSel').onchange = e=>{ DB.active = e.target.value; Y = DB.years[DB.active]; CUR = Y.currency||'€'; save(); render(); };
+  $('#newYear').onclick = newYear;
+  $('#themeBtn').onclick = ()=>{ DB.theme = (DB.theme==='light')?'dark':'light'; applyTheme(); save(true); render(); };
+  window.addEventListener('resize', redrawCharts);
+  setStatus('Ready');
+}
+init();
+</script></body></html>
