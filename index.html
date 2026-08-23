@@ -60,6 +60,7 @@ button,select,input,textarea{font-family:inherit;font-size:13px;color:var(--text
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#08110f;font-weight:600}
 [data-theme="light"] .btn.primary{color:#fff}
 .btn.sm{padding:3px 8px;font-size:12px}
+.btn:disabled{opacity:.32;cursor:default;pointer-events:none}
 .btn.danger:hover{border-color:var(--bad);color:var(--bad)}
 input,select,textarea{
   background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:5px 7px;width:100%;
@@ -232,6 +233,7 @@ function blankYear(year, seed){
     ],
     splitMode:'income',            // 'income' = pro-rata on net pay, 'manual'
     splitManual:{},                // personId -> share 0-1
+    lodgeIncludesSavings: true,    // does "amount to lodge into the joint account" include joint savings
     bills: seed ? seed.bills : [],
     loans: seed ? seed.loans : [],
     savings: seed ? seed.savings : {startDate: year+'-01-01', months:24, growthPct:0, accounts:[]},
@@ -335,6 +337,7 @@ function migrate(y){
   if(!y.payees) y.payees = [];
   if(!SPLIT_MODES[y.splitMode]) y.splitMode = 'income';
   if(!y.splitManual) y.splitManual = {};
+  if(typeof y.lodgeIncludesSavings !== 'boolean') y.lodgeIncludesSavings = true;
   if(!y.energy) y.energy = blankEnergy();
   if(!y.energy.bands) y.energy.bands = blankEnergy().bands;
   if(y.energy.vat === undefined) y.energy.vat = 9;
@@ -1413,6 +1416,8 @@ function renderBudget(el){
   const js = jointShares();
   const manual = Y.splitMode==='manual';
   const rawPctSum = manual ? js.rawSum*100 : 100;
+  const toLodgeTotal = joint + (Y.lodgeIncludesSavings ? sp.jointMonthly : 0);
+  const showEffective = manual && Math.abs(rawPctSum-100)>0.05;
 
   const actualByName = {};
   budgetVsActual().forEach(r=> actualByName[r.category]=r);
@@ -1427,33 +1432,44 @@ function renderBudget(el){
           `<option value="${k}" ${Y.splitMode===k?'selected':''}>${v}</option>`).join('')}</select></label>
       ${manual?`<button class="btn" id="normSplit" style="margin-bottom:9px">Balance to 100%</button>`:''}
       <div class="spacer"></div>
-      <div class="kpi" style="min-width:150px"><div class="lbl">Joint bills / month</div><div class="val">${fmt0(joint)}</div></div>
+      <label style="width:auto;margin-bottom:9px;display:flex;align-items:center;gap:6px">
+        <input type="checkbox" id="lodgeSavings" ${Y.lodgeIncludesSavings?'checked':''}> Include savings</label>
+      <div class="kpi" style="min-width:170px"><div class="lbl">To lodge / month</div>
+        <div class="val">${fmt0(toLodgeTotal)}</div>
+        <div class="sub">${Y.lodgeIncludesSavings? fmt0(joint)+' bills + '+fmt0(sp.jointMonthly)+' savings' : fmt0(joint)+' bills only'}</div></div>
     </div>
     <div class="tw"><table>
-      <thead><tr><th>Person</th><th class="n">Net / month</th><th class="n">Share</th><th class="n">Effective</th>
-        <th class="n">Joint bills</th><th class="n">Own bills</th><th class="n">Savings</th>
+      <thead><tr><th>Person</th><th class="n">Net / month</th><th class="n">Share</th>${showEffective?'<th class="n">Effective</th>':''}
+        <th class="n">To lodge</th><th class="n">Own bills</th><th class="n">Savings</th>
         <th class="n">Left over</th><th class="n">Weekly</th></tr></thead>
       <tbody>${people.map((x,i)=>{
         const share = js.shares[i];
-        const jointPay = joint*share;
+        const billsShare = joint*share;
+        const savShare = Y.lodgeIncludesSavings ? (sp.jointEach||0) : 0;
+        const toLodge = billsShare + savShare;
         const own = (bt.byHolder[x.p.name]||0)/12;
         const sav = sp.rows[i] ? sp.rows[i].total : 0;
-        const left = x.t.netMonthly - jointPay - own - sav;
+        const left = x.t.netMonthly - billsShare - own - sav;   // unchanged by the toggle - see note below
         return `<tr>
           <td>${esc(x.p.name)}</td>
           <td class="n">${fmt(x.t.netMonthly)}</td>
           <td class="n">${manual
             ? `<input class="num" style="width:66px;text-align:right" data-share="${esc(x.p.id)}" value="${(js.raw[i]*100).toFixed(1)}">`
             : pct(share*100)}</td>
-          <td class="n mut">${manual && Math.abs(rawPctSum-100)>0.05 ? pct(share*100) : ''}</td>
-          <td class="n">${fmt(jointPay)}</td>
+          ${showEffective?`<td class="n mut">${pct(share*100)}</td>`:''}
+          <td class="n"><b>${fmt(toLodge)}</b>${Y.lodgeIncludesSavings?` <span class="mut">(${fmt(billsShare)}+${fmt(savShare)})</span>`:''}</td>
           <td class="n">${fmt(own)}</td>
           <td class="n">${fmt(sav)}</td>
           <td class="n ${left>=0?'pos':'neg'}"><b>${fmt(left)}</b></td>
           <td class="n mut">${fmt(left*12/52)}</td></tr>`;
-      }).join('')||'<tr><td colspan="9" class="empty">Add people on the Tax tab.</td></tr>'}</tbody>
+      }).join('')||`<tr><td colspan="${showEffective?9:8}" class="empty">Add people on the Tax tab.</td></tr>`}</tbody>
+      <tfoot><tr><td>Total</td><td class="n">${fmt(people.reduce((s,x)=>s+x.t.netMonthly,0))}</td><td colspan="${showEffective?2:1}"></td>
+        <td class="n">${fmt(toLodgeTotal)}</td>
+        <td class="n">${fmt(bt.annual/12)}</td>
+        <td class="n">${fmt(sp.rows.reduce((s,r)=>s+r.total,0))}</td>
+        <td colspan="2"></td></tr></tfoot>
     </table></div>
-    ${manual && Math.abs(rawPctSum-100)>0.05
+    ${showEffective
       ? `<div class="note">Your percentages add up to ${pct(rawPctSum)}, so they are scaled to fit - the Effective column
          is what actually gets charged. Balance to 100% rewrites them.</div>` : ''}
     ${Y.splitMode==='disposable'
@@ -1463,6 +1479,9 @@ function renderBudget(el){
          : ''}</div>`
       : `<div class="note">Joint bills follow the split above. Joint savings are shared evenly, regardless of income -
          the full per-person breakdown is on the Savings tab.</div>`}
+    <div class="note">${Y.lodgeIncludesSavings
+      ? '"To lodge" is what each person needs to transfer into the joint account each month - their share of the joint bills plus an even share of the joint savings.'
+      : '"To lodge" covers joint bills only. Joint savings are still deducted from “Left over” below - untick just changes what counts as a joint-account transfer, not who owes what.'}</div>
   </div>
 
   ${billTable('bill','Bills', billsOfKind('bill'), holders, actualByName, bt)}
@@ -1482,6 +1501,7 @@ function renderBudget(el){
   </div>`;
 
   wireFields(el);
+  $('#lodgeSavings').onchange = e=>{ Y.lodgeIncludesSavings = e.target.checked; save(); render(); };
   $('#splitMode').onchange = e=>{
     const was = jointShares();
     Y.splitMode = e.target.value;
@@ -2198,6 +2218,14 @@ function renderHistory(el){
   }
 }
 
+/* swap an item with its neighbour; returns false at either end so callers can skip re-rendering */
+function moveItem(arr, i, dir){
+  const j = i + dir;
+  if(j < 0 || j >= arr.length) return false;
+  [arr[i], arr[j]] = [arr[j], arr[i]];
+  return true;
+}
+
 /* ---------------- accounts ---------------- */
 let showIban = false;
 function renderAccounts(el){
@@ -2219,9 +2247,10 @@ function renderAccounts(el){
       <td>${a.iban ? (ok
         ? '<span class="pill on">valid</span>'
         : '<span class="pill" style="border-color:var(--bad);color:var(--bad)">check</span>') : ''}</td>
-      <td><input class="num" data-path="accounts.${i}.bic" value="${esc(a.bic)}" placeholder="BIC" style="min-width:100px" spellcheck="false"></td>
       <td><input data-path="accounts.${i}.notes" value="${esc(a.notes)}" placeholder="Salary goes here"></td>
       <td class="act">
+        <button class="btn sm" data-up-acc="${i}" title="Move up" ${i===0?'disabled':''}>&uarr;</button>
+        <button class="btn sm" data-down-acc="${i}" title="Move down" ${i===list.length-1?'disabled':''}>&darr;</button>
         <button class="btn sm" data-copy-iban="${i}" title="Copy IBAN">Copy</button>
         <button class="btn sm danger" data-del-acc="${i}">x</button></td>
     </tr>`;
@@ -2243,13 +2272,14 @@ function renderAccounts(el){
       <td>${a.iban ? (ok
         ? '<span class="pill on">valid</span>'
         : '<span class="pill" style="border-color:var(--bad);color:var(--bad)">check</span>') : ''}</td>
-      <td><input class="num" data-path="payees.${i}.bic" value="${esc(a.bic)}" placeholder="BIC" style="min-width:100px" spellcheck="false"></td>
       <td><input data-path="payees.${i}.notes" value="${esc(a.notes)}" placeholder="Kitchen job"></td>
       <td class="act">
+        <button class="btn sm" data-up-payee="${i}" title="Move up" ${i===0?'disabled':''}>&uarr;</button>
+        <button class="btn sm" data-down-payee="${i}" title="Move down" ${i===Y.payees.length-1?'disabled':''}>&darr;</button>
         <button class="btn sm" data-copy-payee="${i}" title="Copy IBAN">Copy</button>
         <button class="btn sm danger" data-del-payee="${i}">x</button></td>
     </tr>`;
-  }).join('') || '<tr><td colspan="9" class="empty">No payees saved yet.</td></tr>';
+  }).join('') || '<tr><td colspan="8" class="empty">No payees saved yet.</td></tr>';
 
   el.innerHTML = `
   <datalist id="ownerList">${owners.map(o=>`<option value="${esc(o)}">`).join('')}</datalist>
@@ -2263,15 +2293,16 @@ function renderAccounts(el){
     </div>
     <div class="tw"><table>
       <thead><tr><th>Account</th><th>Owner</th><th>Bank</th><th>Type</th><th>IBAN</th><th></th>
-        <th>BIC</th><th>Notes</th><th></th></tr></thead>
-      <tbody>${rows||'<tr><td colspan="9" class="empty">No accounts yet. Add the ones you actually use - it saves digging out a statement every time.</td></tr>'}</tbody>
+        <th>Notes</th><th></th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="8" class="empty">No accounts yet. Add the ones you actually use - it saves digging out a statement every time.</td></tr>'}</tbody>
     </table></div>
     ${list.length?`<div class="grid g4" style="margin-top:14px">
       ${Object.entries(byOwner).map(([o,n])=>`<div class="kpi"><div class="lbl">${esc(o)}</div>
         <div class="val">${n}</div><div class="sub">account${n===1?'':'s'}</div></div>`).join('')}
     </div>`:''}
     <div class="note">IBANs are hidden by default and validated with the standard checksum, so a typo shows up straight away.
-      They are stored in this browser and included in JSON and CSV exports - keep those exports somewhere sensible.</div>
+      They are stored in this browser and included in JSON and CSV exports - keep those exports somewhere sensible.
+      A BIC is on file for anyone who already had one entered - it's in the CSV export, just off this table.</div>
   </div>
 
   <div class="card">
@@ -2283,7 +2314,7 @@ function renderAccounts(el){
     </div>
     <div class="tw"><table>
       <thead><tr><th>Payee</th><th>Owner</th><th>Bank</th><th>Type</th><th>IBAN</th><th></th>
-        <th>BIC</th><th>Notes</th><th></th></tr></thead>
+        <th>Notes</th><th></th></tr></thead>
       <tbody>${payeeRows}</tbody>
     </table></div>
     <div class="note">Anyone you pay out to - a tradesman, the creche, a family member. The owner field is free text,
@@ -2301,6 +2332,8 @@ function renderAccounts(el){
       Y.accounts.splice(+b.dataset.delAcc,1); save(); render();
     }
   });
+  $$('[data-up-acc]',el).forEach(b=> b.onclick=()=>{ if(moveItem(Y.accounts,+b.dataset.upAcc,-1)){ save(); render(); } });
+  $$('[data-down-acc]',el).forEach(b=> b.onclick=()=>{ if(moveItem(Y.accounts,+b.dataset.downAcc,1)){ save(); render(); } });
   $('#addPayee').onclick = ()=>{
     Y.payees.push({id:uid(), name:'New payee', owner:'', bank:'', type:'Current', iban:'', bic:'', notes:''});
     save(); render();
@@ -2310,6 +2343,8 @@ function renderAccounts(el){
       Y.payees.splice(+b.dataset.delPayee,1); save(); render();
     }
   });
+  $$('[data-up-payee]',el).forEach(b=> b.onclick=()=>{ if(moveItem(Y.payees,+b.dataset.upPayee,-1)){ save(); render(); } });
+  $$('[data-down-payee]',el).forEach(b=> b.onclick=()=>{ if(moveItem(Y.payees,+b.dataset.downPayee,1)){ save(); render(); } });
   const copyIban = v =>{
     if(!v){ toast('No IBAN set'); return; }
     if(navigator.clipboard) navigator.clipboard.writeText(v).then(()=>toast('IBAN copied'), ()=>toast(v));
@@ -3243,6 +3278,7 @@ function newYear(){
   });
   nd.savings.startDate = y+'-01-01';
   nd.splitMode = src.splitMode; nd.splitManual = JSON.parse(JSON.stringify(src.splitManual||{}));
+  nd.lodgeIncludesSavings = src.lodgeIncludesSavings!==false;
   nd.currency = src.currency;
   DB.years[String(y)] = nd;
   DB.active = String(y);
