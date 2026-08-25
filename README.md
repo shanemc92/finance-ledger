@@ -1,10 +1,13 @@
 # finance-ledger
 
+**[Open the live app →](https://shanemc92.github.io/finance-ledger/)** - no download, nothing to
+install, just opens and works.
+
 A single-file personal finance workbook that runs entirely in your browser.
 
 For years I ran my household finances out of one Excel workbook: bills, an Irish PAYE calculator
 I kept re-tuning every Budget, loan amortisation schedules, a bank statement categoriser, savings
-projections, a historical bill log. It worked fine but the problem was everything
+projections, a historical bill log. It worked fine and never broke - the problem was everything
 else around it. Making a change meant opening a laptop. Simulating something temporary, like what
 maternity leave does to a few months of cash flow, meant duplicating sheets and hoping I remembered
 to delete them. And there was no version I could pull up on my phone standing in a shop.
@@ -36,7 +39,9 @@ BIK, AVCs and a bonus taxed at the margin.
 
 **Loans** - daily-interest amortisation, the same method my spreadsheet used. Model a higher
 repayment or drop lump sums onto individual payments and see the interest saved and how many
-payments earlier it clears.
+payments earlier it clears. Set the date the overpayment started and it works out where the loan
+actually stands today - what is still owed, and what interest is yet to be charged between now and
+the final payment.
 
 **Bank** - import a CSV statement (AIB export format, or anything with date/description/debit
 columns - headers are matched automatically). Rules map descriptions to categories, duplicates are
@@ -51,7 +56,8 @@ text owner, so it can be a person, a tradesman or a company.
 
 **Savings** - a per-person breakdown of what is being put aside, with joint amounts split evenly
 regardless of income, plus multiple accounts, contributions, optional growth and a projection out
-as far as you like.
+as far as you like. Money taken back out gets logged against the month it happened, so the
+projection stays honest about the dips.
 
 **Electricity** - import the HDF file from ESB Networks and compare day/night/peak tariffs against
 what you actually used. It takes the last twelve complete months, buckets every half-hourly read
@@ -66,6 +72,12 @@ month by month what that person actually takes home, how far below normal that i
 household is left with after bills and savings. A per-person table shows weekly disposable income
 now against weekly disposable income during the leave, using the same bill split as the Budget tab,
 and there is a toggle to stop their savings for the period to bridge the gap.
+
+**Contracts** - end dates for anything with a fixed term: broadband, insurance, energy, mobile.
+Anything inside 60 days shows on the dashboard, and it can optionally push alerts to
+[ntfy](https://ntfy.sh) at 60, 30, 14 and 7 days out, using ntfy.sh or your own server. One alert
+per contract per milestone, checked when the app opens. This is the only part of the app that
+talks to the internet, and only once you switch it on and give it a topic.
 
 **History** - a log of what bills actually cost month by month, kept across years, so next year's
 budget is set from real numbers instead of guesses.
@@ -85,46 +97,45 @@ budget is set from real numbers instead of guesses.
 
 ## Running it
 
-No coding, no installing anything, no command line. Pick whichever of these fits how you want to
-use it - they all run the exact same page, just from a different place.
+Pick whichever of these fits how you want to use it - they all run the exact same page.
 
-### Option 1: just open the file (quickest)
+### 1. Use it straight from GitHub Pages (quickest)
 
-1. On the repo's [code page](.), click the green **Code** button, then **Download ZIP**.
+**[Open the app →](https://shanemc92.github.io/finance-ledger/)**
+
+No download, no account, nothing to install - it opens straight in your browser. On a phone, add
+it to your home screen (share icon → *Add to Home Screen* on iPhone, browser menu → *Add to Home
+screen* on Android) and it behaves like a normal app icon from then on. Nothing you type is sent
+anywhere - the page is just being served from GitHub, and your data only ever lives in your own
+browser's storage on your own device.
+
+### 2. Download it and open it locally
+
+1. Go to the [repo on GitHub](https://github.com/shanemc92/finance-ledger), click the green
+   **Code** button near the top, then **Download ZIP**.
 2. Unzip it - most phones and computers do this automatically when you tap or double-click the
    `.zip` file.
 3. Open `index.html` from inside the unzipped folder. It opens in your normal browser and that's
    it - you're using it.
 
-This works offline and needs nothing else, but the link only works on the device you downloaded it
-to, and it's a slightly clunkier tap-through on a phone (open Files, find the folder, find the
-file) than a bookmark.
+This works fully offline once downloaded, but it only exists on the device you saved it to, and
+it's a slightly clunkier tap-through on a phone (open Files, find the folder, find the file) than
+a bookmark.
 
-### Option 2: a private link you can open from anywhere (recommended for phones)
+### 3. Run your own copy, your own way
 
-This uses **GitHub Pages**, a free feature of GitHub that turns a repo into a website. It takes
-about two minutes and doesn't need any technical knowledge - you're clicking buttons in a web page,
-not writing anything.
+If you'd rather have an independent copy - to make your own changes, or just so it isn't tied to
+someone else's repo - `index.html` is the entire application, so any of the usual ways to host a
+static site work:
 
-1. If you don't already have one, create a free account at [github.com](https://github.com).
-2. On this repo's page, click **Fork** near the top right. That makes your own personal copy under
-   your account - changes you make later stay separate from this original.
-3. In your fork, click **Settings** (top of the repo page), then **Pages** in the left-hand menu.
-4. Under "Build and deployment", set **Source** to **Deploy from a branch**, set the branch to
-   **main** and the folder to **/ (root)**, then **Save**.
-5. Wait a minute or two, then refresh that Settings > Pages screen. It will show a link like
-   `https://<your-username>.github.io/finance-ledger/` - that's your app, live on the internet.
-
-Open that link on your phone and add it to your home screen (share icon → *Add to Home Screen* on
-iPhone, or the browser menu → *Add to Home screen* on Android) and it behaves like a normal app
-icon from then on. Nothing you enter is sent to GitHub or anywhere else - the page is just being
-served from there, and your data still only lives in your own browser's storage on your own
-device. If you ever want to stop, delete the fork and the link stops working.
-
-### Option 3: your own copy on your own hosting
-
-If you already use something like Netlify, Vercel, or your own web space, `index.html` is the
-entire site - upload that one file and point your domain at it.
+- **Your own GitHub Pages**: click **Fork** on the
+  [repo page](https://github.com/shanemc92/finance-ledger) to make your own copy under your
+  account, then in your fork go to **Settings → Pages**, set **Source** to **Deploy from a
+  branch**, branch **main**, folder **/ (root)**, and **Save**. After a minute or two it's live at
+  `https://<your-username>.github.io/finance-ledger/`.
+- **Netlify, Vercel, or similar**: drag the folder in, or connect the repo - `index.html` at the
+  root is all either one needs.
+- **Your own web space or static server**: upload `index.html` and point your domain at it.
 
 ### A note on your data either way
 
@@ -164,6 +175,10 @@ That also means clearing site data wipes it, so take backups:
 
 "+ Year" rolls bills, loans, savings, rules, people, accounts, payees, electricity tariffs and the
 maternity plan into a new year, applies that year's tax figures, and starts transactions and meter usage empty.
+
+**Duplicate** takes a complete copy of the current year under a new name - "2026-2", say - so you
+can put in changed figures halfway through a year, or keep a couple of what-if scenarios side by
+side and flick between them in the year dropdown. Nothing is shared between the copies.
 
 ## Tax figures
 

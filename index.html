@@ -115,6 +115,10 @@ td.act{width:1%;white-space:nowrap}
 .bar em{position:absolute;right:4px;top:0;font-style:normal;font-size:10.5px;line-height:16px;color:var(--text);font-family:ui-monospace,Menlo,monospace}
 
 .pill{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;border:1px solid var(--line);background:var(--surface2);color:var(--muted)}
+/* click-to-edit cell: an <input> per row is what made the transaction table slow to
+   render, so the value sits as text until you actually click it */
+td.tap{cursor:text;min-width:110px}
+td.tap:hover{background:var(--surface2);border-radius:4px}
 .pill.on{border-color:var(--accent-dim);color:var(--accent)}
 .note{font-size:12px;color:var(--muted);margin-top:8px}
 canvas{display:block;max-width:100%}
@@ -165,6 +169,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:12px;padding:4px 0}
   <section id="tab-accounts"></section>
   <section id="tab-energy"></section>
   <section id="tab-maternity"></section>
+  <section id="tab-renewals"></section>
   <section id="tab-savings"></section>
   <section id="tab-history"></section>
   <section id="tab-data"></section>
@@ -238,6 +243,7 @@ function blankYear(year, seed){
     loans: seed ? seed.loans : [],
     savings: seed ? seed.savings : {startDate: year+'-01-01', months:24, growthPct:0, accounts:[]},
     maternity: seed ? seed.maternity : blankMaternity(),
+    renewals: seed ? seed.renewals : blankRenewals(),
     rules: seed ? seed.rules : [],
     accounts: seed ? seed.accounts : [],
     payees: seed ? seed.payees : [],
@@ -287,6 +293,28 @@ function isBlankYear(y){
     y.history.length===0 && untouchedPerson;
 }
 
+/* Contract renewals. Alerts fire once per threshold as each is crossed, and the
+   thresholds already passed when a contract is added are marked done rather than
+   firing all at once. */
+const RENEWAL_DAYS = [60, 30, 14, 7];
+function blankRenewals(){
+  return { items:[], ntfy:{ enabled:false, server:'https://ntfy.sh', topic:'', priority:'default' } };
+}
+const daysUntil = d => {
+  const t = parseDate(d); if(!t) return null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  t.setHours(0,0,0,0);
+  return Math.round((t - today)/86400000);
+};
+/* Everything renewing within the window, soonest first - used by the dashboard. */
+function upcomingRenewals(withinDays){
+  const w = withinDays===undefined ? 60 : withinDays;
+  return (Y.renewals && Y.renewals.items || [])
+    .map(c => ({...c, days: daysUntil(c.end)}))
+    .filter(c => c.days !== null && c.days <= w)
+    .sort((a,b)=> a.days - b.days);
+}
+
 const KEY = 'ledger.v1';
 let DB = null, Y = null;
 
@@ -314,9 +342,20 @@ function safeCur(v){
    export, so every field a render pass touches is defaulted here rather than assumed
    - the alternative is a render-time crash that gets mislabelled "won't parse" further
    up the chain, when the JSON parsed fine and the problem is a missing field. */
+/* DB.years is keyed by a label rather than a bare year, so the same tax year can hold
+   several scenarios ("2026", "2026-2"). y.year stays numeric because the tax presets
+   key off it; y.label is what gets shown and used in filenames. */
+function yearLabel(y){ const t = y||Y; return String(t.label || t.year || ''); }
+function yearKey(label, exclude){
+  let base = String(label||'').trim().replace(/[^\w \-.]/g,'').slice(0,24) || 'year';
+  let k = base, n = 2;
+  while(DB.years[k] && k!==exclude) k = base+'-'+(n++);
+  return k;
+}
 function migrate(y){
   y.currency = safeCur(y.currency);
   y.year = parseInt(y.year,10) || new Date().getFullYear();
+  if(!y.label) y.label = String(y.year);
   if(!Array.isArray(y.people)) y.people = [];
   if(!Array.isArray(y.bills)) y.bills = [];
   if(!Array.isArray(y.loans)) y.loans = [];
@@ -343,6 +382,10 @@ function migrate(y){
   if(y.energy.vat === undefined) y.energy.vat = 9;
   if(!y.energy.offers) y.energy.offers = [];
   if(y.energy.mprn === undefined) y.energy.mprn = (y.energy.summary && y.energy.summary.mprn) || '';
+  if(!y.renewals) y.renewals = blankRenewals();
+  if(!Array.isArray(y.renewals.items)) y.renewals.items = [];
+  if(!y.renewals.ntfy) y.renewals.ntfy = blankRenewals().ntfy;
+  y.renewals.items.forEach(c=>{ if(!c.id) c.id = uid(); if(!c.sent) c.sent = {}; });
   if(!y.maternity) y.maternity = blankMaternity();
   const mm = y.maternity;
   if(!mm.employerPhases){
@@ -635,19 +678,26 @@ function savingsSplit(){
     .reduce((s,[,a])=>s+a/12, 0);
   return {rows, jointMonthly:st.joint/12, jointEach, totalMonthly:st.monthly, unassigned, heads};
 }
+/* Roll a due date forward to the next occurrence on or after today. Worked out
+   directly rather than stepped one period at a time - a weekly bill dated years back
+   used to take hundreds of iterations and needed a loop guard to stay safe. */
 function nextDueFrom(b){
   if(!b.nextDue) return null;
   const d = parseDate(b.nextDue); if(!d) return null;
   const today = new Date(); today.setHours(0,0,0,0);
+  d.setHours(0,0,0,0);
+  if(d >= today) return d;
   const step = b.freq;
-  let x = new Date(d.getTime()), guard=0;
-  while(x < today && guard++ < 5000){
-    if(step==='Weekly') x = addDays(x,7);
-    else if(step==='Fortnightly') x = addDays(x,14);
-    else if(step==='Monthly') x = addMonths(x,1);
-    else if(step==='Quarterly') x = addMonths(x,3);
-    else x = addMonths(x,12);
+  if(step==='Weekly' || step==='Fortnightly'){
+    const days = step==='Weekly' ? 7 : 14;
+    const periods = Math.ceil(daysBetween(d, today)/days);
+    return addDays(d, periods*days);
   }
+  const months = step==='Monthly' ? 1 : step==='Quarterly' ? 3 : 12;
+  const gap = (today.getFullYear()-d.getFullYear())*12 + (today.getMonth()-d.getMonth());
+  let periods = Math.floor(gap/months);
+  let x = addMonths(d, periods*months);
+  while(x < today) x = addMonths(d, (++periods)*months);   // at most one or two passes
   return x;
 }
 
@@ -720,9 +770,16 @@ function amortise(loan, useProposed){
   const rpy = FREQ[loan.freq]||12;
   const step = loan.freq;
   const start = parseDate(loan.startDate) || new Date();
-  const base = useProposed ? (num(loan.proposedRepayment)||num(loan.repayment)) : num(loan.repayment);
-  const ppi = loan.ppi ? 0.0799*base : 0;
-  const pay = base + ppi;
+  const normal = num(loan.repayment);
+  const boosted = num(loan.proposedRepayment)||normal;
+  /* Overpayments usually start partway through a loan, so the schedule pays the
+     normal amount up to that date and the higher one from then on. No date means
+     the higher amount applies from the start, which is how it behaved before. */
+  const boostFrom = useProposed ? parseDate(loan.proposedStart) : null;
+  const payAt = d => {
+    const base = useProposed && (!boostFrom || d >= boostFrom) ? boosted : normal;
+    return base + (loan.ppi ? 0.0799*base : 0);
+  };
   const extras = loan.extras||{};
   let bal = num(loan.opening), date = new Date(start.getTime());
   const rows=[]; let interest=0, paid=0, n=0;
@@ -735,6 +792,7 @@ function amortise(loan, useProposed){
     else if(step==='Annual') date = addMonths(date,12);
     else date = addMonths(date,1);
     const int = round2(daily*bal*daysBetween(prev,date));
+    const pay = payAt(date);
     const extra = useProposed ? num(extras[n]) : 0;
     let principal = Math.min(bal, Math.max(pay - int, 0) + extra);
     if(pay - int <= 0){ rows.push({n, date:iso(date), opening:bal, interest:int, principal:0, payment:int, balance:bal, stalled:true}); break; }
@@ -744,7 +802,25 @@ function amortise(loan, useProposed){
     interest += int; paid += payment; bal = closing;
   }
   return {rows, interest:round2(interest), paid:round2(paid), payments:rows.length,
-          end: rows.length? rows[rows.length-1].date : '', repayment:pay, cleared: bal<=0.005};
+          end: rows.length? rows[rows.length-1].date : '', repayment:payAt(new Date()), cleared: bal<=0.005};
+}
+
+/* Where a loan actually stands today: what is still owed, and what interest is yet
+   to be charged between now and the final payment. Everything before today has
+   already happened, so it is excluded. */
+function loanPosition(loan, precomputed){
+  const sch = precomputed || amortise(loan, true);
+  const today = new Date(); today.setHours(0,0,0,0);
+  const future = sch.rows.filter(r => parseDate(r.date) >= today);
+  const balance = future.length ? future[0].opening : 0;      // owed before the next payment lands
+  const remainingInterest = round2(future.reduce((s,r)=> s + r.interest, 0));
+  const paidInterest = round2(sch.interest - remainingInterest);
+  return {
+    balance: round2(balance), remainingInterest, paidInterest,
+    toPay: round2(balance + remainingInterest),
+    payments: future.length, next: future.length ? future[0].date : '',
+    end: sch.end, cleared: !future.length, schedule: sch
+  };
 }
 function monthsBetween(a,b){   // DATEDIF "m" semantics: whole months only
   let m = (b.getFullYear()-a.getFullYear())*12 + (b.getMonth()-a.getMonth());
@@ -1216,11 +1292,10 @@ function esc(s){ return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&
 const ALL_TABS = [
   ['dashboard','Dashboard'], ['budget','Budget'], ['tax','Tax'], ['loans','Loans'],
   ['bank','Bank'], ['accounts','Accounts'], ['savings','Savings'], ['maternity','Maternity'],
-  ['energy','Electricity'], ['history','History'], ['data','Data']
+  ['energy','Electricity'], ['renewals','Contracts'], ['history','History'], ['data','Data']
 ];
 /* optional tabs are switched on from the Data tab */
 const tabEnabled = id => id!=='maternity' || !!(Y.maternity && Y.maternity.enabled);
-const TABS = ALL_TABS;
 let active = 'dashboard';
 const charts = [];   // redraw hooks for theme/resize
 let RO = null, redrawTimer = null;
@@ -1242,7 +1317,8 @@ function renderTabs(){
 }
 function renderYears(){
   const ys = Object.keys(DB.years).sort();
-  $('#yearSel').innerHTML = ys.map(y=>`<option value="${y}" ${y===DB.active?'selected':''}>${y}</option>`).join('');
+  $('#yearSel').innerHTML = ys.map(k=>
+    `<option value="${esc(k)}" ${k===DB.active?'selected':''}>${esc(yearLabel(DB.years[k]))}</option>`).join('');
 }
 /* Every edit rebuilds the tab's innerHTML, which throws away where you were:
    the page scroll, the scroll inside any tall table, and which <details> were open.
@@ -1275,7 +1351,7 @@ function render(opts){
   el.classList.add('active');
   ({dashboard:renderDashboard, budget:renderBudget, tax:renderTax, loans:renderLoans,
     bank:renderBank, accounts:renderAccounts, savings:renderSavings, maternity:renderMaternity,
-    energy:renderEnergy, history:renderHistory, data:renderData}[active])(el);
+    energy:renderEnergy, renewals:renderRenewals, history:renderHistory, data:renderData}[active])(el);
   charts.forEach(f=>{ try{ f(); }catch(e){ console.warn(e); } });
   observeCharts();
   restoreView(el, keep);
@@ -1312,7 +1388,9 @@ function renderDashboard(el){
   const {months} = analysisRange();
   const spend = rows.reduce((s,r)=>s+r.spend,0);
   const surplus = netMonthly - bt.monthly - st.monthly;
-  const loanBal = Y.loans.reduce((s,l)=>s+num(l.opening),0);
+  const loanPos = Y.loans.map(l=> loanPosition(l));
+  const loanOwed = loanPos.reduce((s,p)=>s+p.balance,0);
+  const loanInterest = loanPos.reduce((s,p)=>s+p.remainingInterest,0);
   const savingsNow = (Y.savings.accounts||[]).reduce((s,a)=>s+num(a.opening),0);
   const proj = projectSavings();
   const projEnd = proj.length? proj[proj.length-1].total : 0;
@@ -1327,11 +1405,13 @@ function renderDashboard(el){
   <div class="grid g4" style="margin-bottom:14px">
     ${kpi('Net income / month', fmt0(netMonthly), people.map(x=>esc(x.p.name)).join(' + ')||'no earners set')}
     ${kpi('Bills', fmt0(bt.monthly), fmt0(bt.annual)+' a year')}
-    ${kpi('Savings &amp; investments', fmt0(st.monthly), netMonthly?pct(st.monthly/netMonthly*100)+' of net pay':fmt0(st.annual)+' a year', st.monthly?'pos':'')}
+    ${kpi('Savings', fmt0(st.monthly), netMonthly?pct(st.monthly/netMonthly*100)+' of net pay':fmt0(st.annual)+' a year', st.monthly?'pos':'')}
     ${kpi('Monthly surplus', fmt0(surplus), surplus>=0?'after bills and savings':'over-committed', surplus>=0?'pos':'neg')}
     ${kpi('Actual spend', fmt0(spend/months)+'/mo', `${Y.txns.length} transactions loaded`)}
     ${kpi('Savings balance', fmt0(savingsNow), `projected ${fmt0(projEnd)} in ${Y.savings.months||0} months`)}
-    ${kpi('Loan balances', fmt0(loanBal), Y.loans.length+' loan'+(Y.loans.length===1?'':'s'))}
+    ${kpi('Loans still to pay', fmt0(loanOwed+loanInterest),
+        Y.loans.length? fmt0(loanOwed)+' owed + '+fmt0(loanInterest)+' interest to term'
+                      : 'no loans tracked')}
   </div>
 
   <div class="grid g2">
@@ -1392,6 +1472,14 @@ function renderDashboard(el){
 }
 function attentionList(rows, uncat){
   const out=[];
+  const renew = upcomingRenewals(60);
+  if(renew.length) out.push(`<b>Contracts up for renewal</b><ul style="margin:6px 0 12px">`+
+    renew.map(c=>{
+      const when = c.days < 0 ? 'expired '+(-c.days)+' days ago'
+        : c.days === 0 ? 'ends today'
+        : 'ends in '+c.days+' day'+(c.days===1?'':'s');
+      return `<li>${esc(c.name||'unnamed')}${c.provider?' ('+esc(c.provider)+')':''} - ${when} on ${esc(c.end)}</li>`;
+    }).join('')+`</ul>`);
   const over = rows.filter(r=>r.budgetPeriod>0 && r.varPeriod>0).sort((a,b)=>b.varPeriod-a.varPeriod).slice(0,5);
   const due = Y.bills.map(b=>({b, d:nextDueFrom(b)})).filter(x=>x.d)
     .filter(x=> daysBetween(new Date(), x.d) <= 14).sort((a,b)=>a.d-b.d).slice(0,5);
@@ -1501,6 +1589,12 @@ function renderBudget(el){
   </div>`;
 
   wireFields(el);
+  $$('[data-sort]', el).forEach(th=> th.onclick = ()=>{
+    const [kind,col] = th.dataset.sort.split('.');
+    const st = billSort[kind];
+    if(st.col===col) st.dir = -st.dir; else { st.col = col; st.dir = 1; }
+    render();
+  });
   $('#lodgeSavings').onchange = e=>{ Y.lodgeIncludesSavings = e.target.checked; save(); render(); };
   $('#splitMode').onchange = e=>{
     const was = jointShares();
@@ -1534,12 +1628,43 @@ function renderBudget(el){
   });
   $$('[data-export]', el).forEach(b=> b.onclick = ()=>{
     const k = b.dataset.export;
-    downloadCSV((k==='savings'?'savings-commitments-':'bills-')+Y.year+'.csv', billsCSV(k));
+    downloadCSV((k==='savings'?'savings-commitments-':'bills-')+yearLabel()+'.csv', billsCSV(k));
   });
 }
 
+/* View-only sort for the Budget tables. The underlying array keeps whatever manual
+   order it has - this sorts a copy for display, so data-path indexes still point at
+   the real records. */
+const billSort = {bill:{col:null, dir:1}, savings:{col:null, dir:1}};
+const BILL_COLS = {
+  name:   b => String(b.name||'').toLowerCase(),
+  freq:   b => FREQ[b.freq]||0,
+  holder: b => String(b.holder||'').toLowerCase(),
+  amount: b => num(b.amount),
+  annual: b => annualOf(b),
+  monthly:b => annualOf(b)/12,
+  weekly: b => annualOf(b)/52,
+  due:    b => b.nextDue || '9999'
+};
+function sortBills(kind, list){
+  const st = billSort[kind];
+  if(!st.col || !BILL_COLS[st.col]) return list;
+  const key = BILL_COLS[st.col];
+  return list.slice().sort((a,b)=>{
+    const x = key(a), y = key(b);
+    return (x<y ? -1 : x>y ? 1 : 0) * st.dir;
+  });
+}
+function sortableTh(kind, col, label, cls){
+  const st = billSort[kind];
+  const on = st.col===col;
+  const arrow = on ? (st.dir===1 ? ' \u2191' : ' \u2193') : '';
+  return `<th class="${cls||''}" data-sort="${kind}.${col}" style="cursor:pointer;user-select:none"
+    title="Sort by ${esc(label)}">${label}${arrow}</th>`;
+}
 function billTable(kind, title, rows, holders, actualByName, totals){
   const isSav = kind==='savings';
+  rows = sortBills(kind, rows);
   const body = rows.map(b=>{
     const i = Y.bills.indexOf(b);
     const a = annualOf(b), act = actualByName[b.name];
@@ -1568,9 +1693,9 @@ function billTable(kind, title, rows, holders, actualByName, totals){
   return `<div class="card">
     <h2>${title} <span class="pill">${rows.length}</span></h2>
     <div class="tw"><table>
-      <thead><tr><th>${isSav?'Commitment':'Bill'}</th><th>Frequency</th><th>Holder</th><th class="n">Amount</th>
-        <th class="n">Annual</th><th class="n">Monthly</th><th class="n">Weekly</th>
-        <th>Next due</th><th class="n">Upcoming</th><th class="n">Actual /mo</th><th>Budget used</th><th></th></tr></thead>
+      <thead><tr>${sortableTh(kind,'name',isSav?'Commitment':'Bill')}${sortableTh(kind,'freq','Frequency')}${sortableTh(kind,'holder','Holder')}${sortableTh(kind,'amount','Amount','n')}
+        ${sortableTh(kind,'annual','Annual','n')}${sortableTh(kind,'monthly','Monthly','n')}${sortableTh(kind,'weekly','Weekly','n')}
+        ${sortableTh(kind,'due','Next due')}<th class="n">Upcoming</th><th class="n">Actual /mo</th><th>Budget used</th><th></th></tr></thead>
       <tbody>${body||`<tr><td colspan="12" class="empty">${empty}</td></tr>`}</tbody>
       <tfoot><tr><td>Total</td><td></td><td></td>
         <td class="n">${fmt(rows.reduce((s,b)=>s+num(b.amount),0))}</td>
@@ -1710,8 +1835,14 @@ function renderLoans(el){
       <button class="btn primary" id="addLoan">+ Add loan</button></div>`;
     $('#addLoan').onclick = addLoan; return;
   }
+  /* each schedule is a full amortisation run, so work them out once here and reuse
+     them in the rows, the summary and the chart below */
+  const schedules = Y.loans.map(l=>{
+    const prop = amortise(l,true);
+    return {orig: amortise(l,false), prop, pos: loanPosition(l, prop)};
+  });
   el.innerHTML = Y.loans.map((l,i)=>{
-    const orig = amortise(l,false), prop = amortise(l,true);
+    const orig = schedules[i].orig, prop = schedules[i].prop, pos = schedules[i].pos;
     const calc = calcRepayment(l);
     const saveInt = orig.interest - prop.interest;
     const sooner = orig.payments - prop.payments;
@@ -1727,13 +1858,19 @@ function renderLoans(el){
         <label class="f"><span>Start date</span><input type="date" data-path="loans.${i}.startDate" value="${esc(l.startDate||'')}"></label>
         <label class="f"><span>Current repayment</span><input class="num" data-path="loans.${i}.repayment" data-type="number" value="${num(l.repayment)}"></label>
         <label class="f"><span>Proposed repayment</span><input class="num" data-path="loans.${i}.proposedRepayment" data-type="number" value="${num(l.proposedRepayment)}"></label>
+        <label class="f"><span>Overpayment starts</span><input type="date" data-path="loans.${i}.proposedStart" value="${esc(l.proposedStart||'')}"></label>
         <label class="f"><span>Target end date</span><input type="date" data-path="loans.${i}.endDate" value="${esc(l.endDate||'')}"></label>
         <label class="f"><span>PPI on loan</span><select data-path="loans.${i}.ppi" data-type="bool">
           <option value="">No</option><option value="1" ${l.ppi?'selected':''}>Yes (7.99%)</option></select></label>
       </div>
       ${calc? `<div class="note">To clear by the target date the repayment would need to be <b>${fmt(calc)}</b> per ${esc(String(l.freq).toLowerCase().replace('ly',''))}.</div>`:''}
+      ${l.proposedStart? `<div class="note">Normal repayments up to ${esc(l.proposedStart)}, then ${fmt(num(l.proposedRepayment)||num(l.repayment))} from that date on.</div>`:''}
 
       <div class="grid g4" style="margin:12px 0">
+        <div class="kpi"><div class="lbl">Owed today</div><div class="val">${fmt0(pos.balance)}</div>
+          <div class="sub">${pos.cleared?'cleared':'+ '+fmt0(pos.remainingInterest)+' interest to come'}</div></div>
+        <div class="kpi"><div class="lbl">Still to pay</div><div class="val">${fmt0(pos.toPay)}</div>
+          <div class="sub">${pos.payments} payment${pos.payments===1?'':'s'} left${pos.next?', next '+esc(pos.next):''}</div></div>
         <div class="kpi"><div class="lbl">Interest - current</div><div class="val">${fmt0(orig.interest)}</div><div class="sub">${orig.payments} payments to ${orig.end}</div></div>
         <div class="kpi"><div class="lbl">Interest - proposed</div><div class="val">${fmt0(prop.interest)}</div><div class="sub">${prop.payments} payments to ${prop.end}</div></div>
         <div class="kpi"><div class="lbl">Interest saved</div><div class="val ${saveInt>0?'pos':''}">${fmt0(saveInt)}</div><div class="sub">${sooner>0?sooner+' payments sooner':'no change'}</div></div>
@@ -1776,7 +1913,7 @@ function renderLoans(el){
     downloadCSV(slug(l.name)+'-schedule.csv', loanCSV(l));
   });
   Y.loans.forEach((l,i)=> chart(()=>{
-    const o = amortise(l,false), p = amortise(l,true);
+    const o = schedules[i].orig, p = schedules[i].prop;
     const n = Math.max(o.rows.length, p.rows.length);
     const labels = Array.from({length:n},(_,k)=> (o.rows[k]||p.rows[k]).date.slice(0,7));
     const pad = (rows)=> Array.from({length:n},(_,k)=> rows[k]? rows[k].balance : 0);
@@ -1907,8 +2044,30 @@ function renderBank(el){
     Y.rules.push({match:x.dataset.quickrule, category:cat});
     applyRules(false); save(); render();
   });
-  $$('[data-txncat]',el).forEach(x=> x.onchange=()=>{
-    Y.txns[+x.dataset.txncat].category = x.value; save(); render();
+  /* Swap a single cell for an input on demand rather than rendering 400 of them up
+     front - that alone was most of this tab's render cost. */
+  $$('[data-txncat]',el).forEach(td=> td.onclick = ()=>{
+    if(td.querySelector('input')) return;
+    const i = +td.dataset.txncat;
+    const inp = document.createElement('input');
+    inp.setAttribute('list','catList');
+    inp.value = Y.txns[i].category || '';
+    inp.style.minWidth = '110px';
+    td.innerHTML = '';
+    td.appendChild(inp);
+    inp.focus(); inp.select();
+    let done = false;
+    const commit = ()=>{
+      if(done) return; done = true;
+      const v = inp.value.trim();
+      if(v === (Y.txns[i].category||'')){ render(); return; }
+      Y.txns[i].category = v; save(); render();
+    };
+    inp.onblur = commit;
+    inp.onkeydown = e=>{
+      if(e.key==='Enter'){ e.preventDefault(); commit(); }
+      else if(e.key==='Escape'){ done = true; render(); }
+    };
   });
   $('#txnFilter').oninput = e=>{
     const q = e.target.value.toLowerCase();
@@ -1917,9 +2076,9 @@ function renderBank(el){
     });
   };
   $('#clearTxns').onclick = ()=>{ if(confirm('Remove all '+Y.txns.length+' transactions for '+Y.year+'?')){ Y.txns=[]; save(); render(); } };
-  $('#exportTxns').onclick = ()=> downloadCSV('transactions-'+Y.year+'.csv', txnCSV());
-  $('#exportAnalysis').onclick = ()=> downloadCSV('analysis-'+Y.year+'.csv', analysisCSV());
-  $('#exportRules').onclick = ()=> downloadCSV('rules-'+Y.year+'.csv', rulesCSV());
+  $('#exportTxns').onclick = ()=> downloadCSV('transactions-'+yearLabel()+'.csv', txnCSV());
+  $('#exportAnalysis').onclick = ()=> downloadCSV('analysis-'+yearLabel()+'.csv', analysisCSV());
+  $('#exportRules').onclick = ()=> downloadCSV('rules-'+yearLabel()+'.csv', rulesCSV());
 }
 const TXN_LIMIT = 800;
 function txnRows(){
@@ -1932,7 +2091,7 @@ function txnRows(){
       <td class="n">${t.debit?fmt(num(t.debit)):''}</td>
       <td class="n pos">${t.credit?fmt(num(t.credit)):''}</td>
       <td class="n mut">${t.balance!==''&&t.balance!=null?fmt(num(t.balance)):''}</td>
-      <td><input list="catList" data-txncat="${i}" value="${esc(t.category||'')}" style="min-width:120px"></td>
+      <td class="tap" data-txncat="${i}">${t.category? esc(t.category) : '<span class="mut">uncategorised</span>'}</td>
     </tr>`).join('') || '<tr><td colspan="6" class="empty">No transactions.</td></tr>';
 }
 function parseCSV(text){
@@ -2091,20 +2250,26 @@ function renderSavings(el){
   <div class="card">
     <h2>Accounts</h2>
     <div class="tw"><table>
-      <thead><tr><th>Account</th><th class="n">Opening</th><th class="n">Monthly</th><th class="n">Projected end</th><th></th></tr></thead>
+      <thead><tr><th>Account</th><th class="n">Opening</th><th class="n">Monthly</th><th class="n">Deducted</th><th class="n">Projected end</th><th></th></tr></thead>
       <tbody>${s.accounts.map((a,i)=>`<tr>
         <td><input data-path="savings.accounts.${i}.name" value="${esc(a.name)}"></td>
         <td class="n"><input class="num" style="text-align:right" data-path="savings.accounts.${i}.opening" data-type="number" value="${num(a.opening)}"></td>
         <td class="n"><input class="num" style="text-align:right" data-path="savings.accounts.${i}.monthly" data-type="number" value="${num(a.monthly)}"></td>
+        <td class="n">${(()=>{ const d = deductedTotal(a);
+          return d ? `<span class="neg">${fmt(d)}</span>` : '<span class="mut">-</span>'; })()}
+          <button class="btn sm" data-dip="${i}" title="Log money taken out">Log</button></td>
         <td class="n">${proj.length?fmt(proj[proj.length-1].values[i]):''}</td>
         <td class="act"><button class="btn sm danger" data-del-acct="${i}">x</button></td></tr>`).join('')
-        || '<tr><td colspan="5" class="empty">No savings accounts yet.</td></tr>'}</tbody>
-      <tfoot><tr><td>Total</td><td class="n">${fmt(now)}</td><td class="n">${fmt(monthlyIn)}</td><td class="n">${fmt(end)}</td><td></td></tr></tfoot>
+        || '<tr><td colspan="6" class="empty">No savings accounts yet.</td></tr>'}</tbody>
+      <tfoot><tr><td>Total</td><td class="n">${fmt(now)}</td><td class="n">${fmt(monthlyIn)}</td>
+        <td class="n neg">${fmt(s.accounts.reduce((x,a)=>x+deductedTotal(a),0))}</td>
+        <td class="n">${fmt(end)}</td><td></td></tr></tfoot>
     </table></div>
     <div class="row" style="margin-top:10px">
       <button class="btn" id="addAcct">+ Add account</button>
       <button class="btn" id="exportSavings">Export CSV</button>
     </div>
+    ${dipRows(s)}
   </div>
 
   <div class="card">
@@ -2124,13 +2289,47 @@ function renderSavings(el){
 
   wireFields(el);
   $('#addAcct').onclick = ()=>{ s.accounts.push({name:'Account '+(s.accounts.length+1), opening:0, monthly:0, adjust:{}}); save(); render(); };
+  $$('[data-dip]',el).forEach(b=> b.onclick = ()=>{
+    const a = s.accounts[+b.dataset.dip];
+    const amt = num(prompt('How much came out of '+(a.name||'this account')+'?', ''));
+    if(!amt) return;
+    const when = (prompt('Which month? (YYYY-MM)', monthKey(new Date()))||'').trim();
+    if(!/^\d{4}-\d{2}$/.test(when)){ toast('Need a month like 2026-03'); return; }
+    a.adjust = a.adjust||{};
+    a.adjust[when] = round2(num(a.adjust[when]) + amt);
+    save(); render(); toast(fmt(amt)+' logged against '+when);
+  });
+  $$('[data-undip]',el).forEach(b=> b.onclick = ()=>{
+    const [ai,mk] = b.dataset.undip.split('|');
+    const a = s.accounts[+ai];
+    if(a && a.adjust) delete a.adjust[mk];
+    save(); render();
+  });
   $$('[data-del-acct]',el).forEach(x=> x.onclick=()=>{ s.accounts.splice(+x.dataset.delAcct,1); save(); render(); });
-  $('#exportSavings').onclick = ()=> downloadCSV('savings-'+Y.year+'.csv', savingsCSV());
+  $('#exportSavings').onclick = ()=> downloadCSV('savings-'+yearLabel()+'.csv', savingsCSV());
   chart(()=>{
     const series = s.accounts.slice(0,8).map((a,i)=>({name:a.name, color:PALETTE[i%PALETTE.length], values:proj.map(r=>r.values[i])}));
     series.push({name:'Total', color:css('--text'), values:proj.map(r=>r.total), dash:true});
     lineChart($('#cProj'), proj.map(r=>r.date.slice(0,7)), series);
   });
+}
+
+const deductedTotal = a => Object.values((a && a.adjust) || {}).reduce((s,v)=>s+num(v),0);
+/* Every dip into a savings account, listed so it can be corrected or removed.
+   projectSavings() already subtracts these in the month they happened. */
+function dipRows(s){
+  const all = [];
+  s.accounts.forEach((a,i)=> Object.entries(a.adjust||{}).forEach(([mk,v])=>
+    all.push({i, name:a.name, mk, v:num(v)})));
+  if(!all.length) return '';
+  all.sort((x,y)=> x.mk<y.mk?1:-1);
+  return `<details style="margin-top:10px"><summary>Money taken out (${all.length})</summary>
+    <div class="tw" style="max-height:260px;overflow:auto;margin-top:8px"><table>
+      <thead><tr><th>Month</th><th>Account</th><th class="n">Amount</th><th></th></tr></thead>
+      <tbody>${all.map(d=>`<tr><td>${esc(d.mk)}</td><td>${esc(d.name)}</td>
+        <td class="n neg">${fmt(d.v)}</td>
+        <td class="act"><button class="btn sm danger" data-undip="${d.i}|${esc(d.mk)}">x</button></td></tr>`).join('')}</tbody>
+    </table></div></details>`;
 }
 
 /* ---------------- history ---------------- */
@@ -2155,6 +2354,8 @@ function renderHistory(el){
       <div class="spacer"></div>
       <button class="btn" id="hFromTxns">Build from transactions</button>
       <button class="btn" id="exportHistory">Export CSV</button>
+      <label class="f" style="width:200px;margin:0"><span>Import CSV (replaces)</span>
+        <input type="file" id="hImport" accept=".csv,text/csv"></label>
     </div>
     <datalist id="catList2">${Y.bills.map(b=>`<option value="${esc(b.name)}">`).join('')}</datalist>
   </div>
@@ -2206,7 +2407,36 @@ function renderHistory(el){
     });
     save(); render(); toast(n+' months added from transactions');
   };
-  $('#exportHistory').onclick = ()=> downloadCSV('history-'+Y.year+'.csv', historyCSV());
+  $('#exportHistory').onclick = ()=> downloadCSV('history-'+yearLabel()+'.csv', historyCSV());
+  $('#hImport').onchange = e=>{
+    const f = e.target.files[0]; if(!f) return;
+    const rd = new FileReader();
+    rd.onload = ()=>{
+      const rows = parseCSV(rd.result);
+      e.target.value = '';
+      if(!rows.length){ toast('Nothing in that file'); return; }
+      const head = rows[0].map(h=>String(h).trim().toLowerCase());
+      const iM = head.findIndex(h=>h.includes('month'));
+      const iC = head.findIndex(h=>h.includes('categ'));
+      const iA = head.findIndex(h=>h.includes('amount'));
+      if(iM<0||iC<0||iA<0){ toast('Need Month, Category and Amount columns'); return; }
+      const out = [];
+      for(let r=1;r<rows.length;r++){
+        const c = rows[r];
+        const m = String(c[iM]||'').trim().slice(0,7);
+        const cat = String(c[iC]||'').trim();
+        if(!/^\d{4}-\d{2}$/.test(m) || !cat) continue;
+        out.push({month:m, category:cat, amount:num(c[iA])});
+      }
+      if(!out.length){ toast('No usable rows - months need to look like 2026-03'); return; }
+      if(Y.history.length && !confirm('Replace all '+Y.history.length+' existing history rows with '+out.length+' from this file?')) return;
+      Y.history = out;
+      save(); render();
+      toast(out.length+' history rows imported');
+    };
+    rd.onerror = ()=>{ toast('Could not read that file'); e.target.value=''; };
+    rd.readAsText(f);
+  };
   const sel = $('#hSel');
   if(sel){
     sel.onchange = ()=>{ histSel = sel.value; render(); };
@@ -2352,8 +2582,8 @@ function renderAccounts(el){
   };
   $$('[data-copy-iban]',el).forEach(b=> b.onclick=()=> copyIban(ibanClean(Y.accounts[+b.dataset.copyIban].iban)));
   $$('[data-copy-payee]',el).forEach(b=> b.onclick=()=> copyIban(ibanClean(Y.payees[+b.dataset.copyPayee].iban)));
-  $('#exportAcc').onclick = ()=> downloadCSV('accounts-'+Y.year+'.csv', accountsCSV());
-  $('#exportPayees').onclick = ()=> downloadCSV('payees-'+Y.year+'.csv', payeesCSV());
+  $('#exportAcc').onclick = ()=> downloadCSV('accounts-'+yearLabel()+'.csv', accountsCSV());
+  $('#exportPayees').onclick = ()=> downloadCSV('payees-'+yearLabel()+'.csv', payeesCSV());
 }
 
 /* ---------------- electricity ---------------- */
@@ -2572,8 +2802,8 @@ function renderEnergy(el){
     Y.energy.offers.forEach((o,i)=> o.current = (i === +x.dataset.current));
     save(); render();
   });
-  $('#exportOffers').onclick = ()=> downloadCSV('electricity-offers-'+Y.year+'.csv', offersCSV());
-  if($('#exportUsage')) $('#exportUsage').onclick = ()=> downloadCSV('electricity-usage-'+Y.year+'.csv', usageCSV());
+  $('#exportOffers').onclick = ()=> downloadCSV('electricity-offers-'+yearLabel()+'.csv', offersCSV());
+  if($('#exportUsage')) $('#exportUsage').onclick = ()=> downloadCSV('electricity-usage-'+yearLabel()+'.csv', usageCSV());
 
   /* offer comparison needs priced offers; usage and profile only need a summary */
   if(s && valid.length) chart(()=>{
@@ -2841,6 +3071,175 @@ function wireMaternity(el){
   });
 }
 
+/* ---------------- contract renewals ---------------- */
+
+/* The only outbound request the app ever makes, and only when it has been switched on
+   with a topic. Fires from a plain POST so it works against ntfy.sh or a self-hosted
+   server without any client library. */
+function ntfyUrl(){
+  const n = Y.renewals.ntfy;
+  const server = String(n.server||'https://ntfy.sh').trim().replace(/\/+$/,'');
+  const topic = String(n.topic||'').trim().replace(/^\/+/,'');
+  if(!topic) return '';
+  return server+'/'+topic;
+}
+function sendNtfy(title, message, tags){
+  const url = ntfyUrl();
+  if(!url) return Promise.reject(new Error('no topic set'));
+  return fetch(url, {
+    method:'POST',
+    headers:{
+      'Title': title,
+      'Tags': tags || 'calendar',
+      'Priority': String(Y.renewals.ntfy.priority||'default')
+    },
+    body: message
+  }).then(r=>{ if(!r.ok) throw new Error('ntfy returned '+r.status); return r; });
+}
+
+/* Called once on load. Walks every contract, works out which thresholds have been
+   crossed since last time, and sends at most one alert per contract per threshold. */
+function checkRenewals(){
+  const R = Y.renewals;
+  if(!R || !R.ntfy.enabled || !ntfyUrl()) return;
+  const due = [];
+  R.items.forEach(c=>{
+    const d = daysUntil(c.end);
+    if(d === null || d < 0) return;
+    RENEWAL_DAYS.forEach(m=>{
+      if(d <= m && !c.sent[m]) due.push({c, m, d});
+    });
+  });
+  if(!due.length) return;
+  // only the tightest threshold per contract actually sends; the rest are just marked
+  const bySlot = {};
+  due.forEach(x=>{ if(!bySlot[x.c.id] || x.m < bySlot[x.c.id].m) bySlot[x.c.id] = x; });
+  due.forEach(x=>{ x.c.sent[x.m] = true; });
+  Object.values(bySlot).forEach(({c,d})=>{
+    const when = d === 0 ? 'today' : d === 1 ? 'tomorrow' : 'in '+d+' days';
+    sendNtfy(
+      'Contract renewal: '+(c.name||'unnamed'),
+      (c.provider? c.provider+' - ' : '')+(c.name||'contract')+' is up for renewal '+when+
+        ' ('+c.end+')'+(num(c.cost)? '. Currently '+fmt(num(c.cost))+' a month.' : '')+
+        (c.notes? '\n'+c.notes : ''),
+      d <= 7 ? 'rotating_light' : 'calendar'
+    ).catch(err=> console.warn('ntfy send failed', err));
+  });
+  save(true);
+}
+
+function renderRenewals(el){
+  const R = Y.renewals;
+  const items = R.items;
+  const billNames = Y.bills.map(b=>b.name).filter(Boolean);
+
+  const rows = items.map((c,i)=>{
+    const d = daysUntil(c.end);
+    const pill = d===null ? '<span class="mut">no date</span>'
+      : d < 0 ? '<span class="pill" style="border-color:var(--bad);color:var(--bad)">expired</span>'
+      : d <= 7 ? `<span class="pill" style="border-color:var(--bad);color:var(--bad)">${d}d</span>`
+      : d <= 30 ? `<span class="pill" style="border-color:var(--warn);color:var(--warn)">${d}d</span>`
+      : d <= 60 ? `<span class="pill on">${d}d</span>`
+      : `<span class="pill">${d}d</span>`;
+    const stage = RENEWAL_DAYS.filter(m=>c.sent[m]).length;
+    return `<tr>
+      <td><input data-path="renewals.items.${i}.name" value="${esc(c.name)}" placeholder="Broadband" list="billNameList"></td>
+      <td><input data-path="renewals.items.${i}.provider" value="${esc(c.provider)}" placeholder="Siro"></td>
+      <td><input type="date" data-path="renewals.items.${i}.end" value="${esc(c.end||'')}" style="min-width:140px"></td>
+      <td class="n">${pill}</td>
+      <td class="n"><input class="num" style="text-align:right;width:90px" data-path="renewals.items.${i}.cost" data-type="number" value="${num(c.cost)}"></td>
+      <td><input data-path="renewals.items.${i}.notes" value="${esc(c.notes)}" placeholder="Out of contract fee applies"></td>
+      <td class="n mut">${stage?stage+'/'+RENEWAL_DAYS.length:''}</td>
+      <td class="act">
+        <button class="btn sm" data-renewed="${i}" title="Push the date on a year and reset the alerts">Renewed</button>
+        <button class="btn sm danger" data-del-renewal="${i}">x</button></td>
+    </tr>`;
+  }).join('');
+
+  const soon = upcomingRenewals(60);
+
+  el.innerHTML = `
+  <datalist id="billNameList">${billNames.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>
+
+  ${soon.length?`<div class="grid g4" style="margin-bottom:14px">
+    ${soon.slice(0,4).map(c=>`<div class="kpi"><div class="lbl">${esc(c.name||'unnamed')}</div>
+      <div class="val ${c.days<=14?'neg':c.days<=30?'amb':''}">${c.days}d</div>
+      <div class="sub">${esc(c.provider||'')}${c.provider?' - ':''}${esc(c.end)}</div></div>`).join('')}
+  </div>`:''}
+
+  <div class="card">
+    <h2>Contracts <span class="pill">${items.length}</span></h2>
+    <div class="tw"><table>
+      <thead><tr><th>Contract</th><th>Provider</th><th>Ends</th><th class="n">Left</th>
+        <th class="n">Cost /mo</th><th>Notes</th><th class="n">Alerts</th><th></th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="8" class="empty">Nothing tracked yet. Add the ones with a fixed term - broadband, insurance, energy, mobile.</td></tr>'}</tbody>
+    </table></div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" id="addRenewal">+ Add contract</button>
+      <button class="btn" id="exportRenewals">Export CSV</button>
+    </div>
+    <div class="note">Anything inside 60 days shows on the dashboard. "Renewed" moves the end date on
+      twelve months and clears the alert history so the next cycle starts fresh.</div>
+  </div>
+
+  <div class="card">
+    <h2>Push notifications</h2>
+    <label style="display:block;margin-bottom:10px"><input type="checkbox" id="ntfyOn" ${R.ntfy.enabled?'checked':''}>
+      Send renewal alerts to ntfy</label>
+    <div class="grid g3">
+      <label class="f"><span>Server</span><input data-path="renewals.ntfy.server" value="${esc(R.ntfy.server||'')}" placeholder="https://ntfy.sh" spellcheck="false"></label>
+      <label class="f"><span>Topic</span><input data-path="renewals.ntfy.topic" value="${esc(R.ntfy.topic||'')}" placeholder="my-bills-a7f3k" spellcheck="false"></label>
+      <label class="f"><span>Priority</span>
+        <select data-path="renewals.ntfy.priority">
+          ${['min','low','default','high','urgent'].map(p=>`<option ${R.ntfy.priority===p?'selected':''}>${p}</option>`).join('')}
+        </select></label>
+    </div>
+    <div class="row">
+      <button class="btn" id="ntfyTest" ${R.ntfy.topic?'':'disabled'}>Send a test</button>
+      <button class="btn" id="ntfyReset">Reset alert history</button>
+    </div>
+    <div class="note">Alerts go out at ${RENEWAL_DAYS.join(', ')} days before the end date - one per contract per
+      milestone, checked when the app opens. Install the ntfy app (or open <span class="num">${esc(ntfyUrl()||'your-server/your-topic')}</span>
+      in a browser) and subscribe to the same topic.</div>
+    <div class="note">This is the only thing in the app that talks to the internet, and only when you switch it on.
+      Anyone who knows the topic name can read what is posted to it, so pick something no one would guess and keep
+      the details in the message short.</div>
+  </div>`;
+
+  wireFields(el);
+  $('#addRenewal').onclick = ()=>{
+    R.items.push({id:uid(), name:'New contract', provider:'', end:'', cost:0, notes:'', sent:{}});
+    save(); render();
+  };
+  $$('[data-del-renewal]',el).forEach(b=> b.onclick = ()=>{
+    R.items.splice(+b.dataset.delRenewal,1); save(); render();
+  });
+  $$('[data-renewed]',el).forEach(b=> b.onclick = ()=>{
+    const c = R.items[+b.dataset.renewed];
+    const d = parseDate(c.end);
+    if(!d){ toast('Set an end date first'); return; }
+    c.end = iso(addMonths(d,12));
+    c.sent = {};
+    save(); render();
+    toast('Moved on to '+c.end);
+  });
+  $('#ntfyOn').onchange = e=>{
+    R.ntfy.enabled = e.target.checked;
+    save(); render();
+    if(e.target.checked && !R.ntfy.topic) toast('Add a topic name to start sending');
+  };
+  if($('#ntfyTest')) $('#ntfyTest').onclick = ()=>{
+    sendNtfy('Ledger test', 'If you can read this, renewal alerts will reach you here.', 'white_check_mark')
+      .then(()=> toast('Test sent to '+ntfyUrl()))
+      .catch(err=> toast('Could not reach ntfy - '+err.message));
+  };
+  $('#ntfyReset').onclick = ()=>{
+    R.items.forEach(c=> c.sent = {});
+    save(); render(); toast('Alert history cleared');
+  };
+  $('#exportRenewals').onclick = ()=> downloadCSV('contracts-'+yearLabel()+'.csv', renewalsCSV());
+}
+
 /* ---------------- export helpers ---------------- */
 const slug = s => String(s||'sheet').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'sheet';
 /* A cell starting = + - @ (or a leading tab/CR) is executed as a formula by Excel,
@@ -2918,6 +3317,12 @@ function savingsCSV(){
   const proj = projectSavings();
   const rows=[['Month', ...Y.savings.accounts.map(a=>a.name), 'Total']];
   proj.forEach(r=> rows.push([r.date, ...r.values.map(v=>round2(v)), round2(r.total)]));
+  const dips = [];
+  Y.savings.accounts.forEach(a=> Object.entries(a.adjust||{}).forEach(([mk,v])=> dips.push([mk, a.name, num(v)])));
+  if(dips.length){
+    rows.push([]); rows.push(['Money taken out']); rows.push(['Month','Account','Amount']);
+    dips.sort((x,y)=> x[0]<y[0]?-1:1).forEach(d=> rows.push(d));
+  }
   return rows;
 }
 function historyCSV(){
@@ -2929,6 +3334,14 @@ function accountsCSV(){
   const rows=[['Account','Owner','Bank','Type','IBAN','BIC','Notes','IBAN valid']];
   Y.accounts.forEach(a=> rows.push([a.name,a.owner,a.bank,a.type,ibanPretty(a.iban),a.bic||'',a.notes||'',
     a.iban?(ibanValid(a.iban)?'yes':'no'):'']));
+  return rows;
+}
+function renewalsCSV(){
+  const rows=[['Contract','Provider','Ends','Days left','Cost /mo','Notes']];
+  (Y.renewals && Y.renewals.items || []).forEach(c=>{
+    const d = daysUntil(c.end);
+    rows.push([c.name, c.provider||'', c.end||'', d===null?'':d, num(c.cost), c.notes||'']);
+  });
   return rows;
 }
 function payeesCSV(){
@@ -3000,7 +3413,8 @@ function allSheets(){
     {name:'Savings', rows:savingsCSV()},
     {name:'History', rows:historyCSV()},
     {name:'Accounts', rows:accountsCSV()},
-    {name:'Payees', rows:payeesCSV()}
+    {name:'Payees', rows:payeesCSV()},
+    {name:'Contracts', rows:renewalsCSV()}
   ];
   if(Y.energy && Y.energy.summary) s.push({name:'Electricity Usage', rows:usageCSV()});
   if(Y.energy && (Y.energy.offers||[]).length) s.push({name:'Electricity Offers', rows:offersCSV()});
@@ -3143,14 +3557,15 @@ function renderData(el){
       <tbody>${Object.keys(DB.years).sort().map(y=>{
         const d = DB.years[y];
         const ann = d.bills.reduce((s,b)=> s+num(b.amount)*(FREQ[b.freq]||12), 0);
-        return `<tr><td>${y} ${y===DB.active?'<span class="pill on">active</span>':''}</td>
+        return `<tr><td>${esc(yearLabel(d))} ${y===DB.active?'<span class="pill on">active</span>':''}</td>
           <td class="n">${d.bills.length}</td><td class="n">${d.loans.length}</td><td class="n">${d.txns.length}</td>
           <td class="n">${fmt(ann/12)}</td>
           <td class="act">${Object.keys(DB.years).length>1?`<button class="btn sm danger" data-del-year="${y}">Delete</button>`:''}</td></tr>`;
       }).join('')}</tbody>
     </table></div>
     <div class="row" style="margin-top:10px">
-      <button class="btn" id="newYear2">+ New year from ${esc(Y.year)}</button>
+      <button class="btn" id="newYear2">+ New year from ${esc(yearLabel())}</button>
+      <button class="btn" id="dupYear">Duplicate ${esc(yearLabel())}</button>
       <div class="spacer"></div>
       <label class="f" style="width:110px;margin:0"><span>Currency</span><input data-path="currency" value="${esc(Y.currency)}" maxlength="3"></label>
     </div>
@@ -3163,12 +3578,12 @@ function renderData(el){
   </div>`;
 
   wireFields(el);
-  $('#expXlsx').onclick = ()=>{ downloadXlsx('finances-'+Y.year+'.xlsx', allSheets()); toast('Workbook downloaded'); };
-  $('#expJson').onclick = ()=> downloadText('ledger-'+Y.year+'.json', JSON.stringify({kind:'ledger-year', year:Y.year, data:Y}, null, 2));
+  $('#expXlsx').onclick = ()=>{ downloadXlsx('finances-'+yearLabel()+'.xlsx', allSheets()); toast('Workbook downloaded'); };
+  $('#expJson').onclick = ()=> downloadText('ledger-'+yearLabel()+'.json', JSON.stringify({kind:'ledger-year', year:Y.year, label:yearLabel(), data:Y}, null, 2));
   $('#expAll').onclick = ()=> downloadText('ledger-all-years.json', JSON.stringify(DB, null, 2));
   $('#expAllCsv').onclick = ()=>{
     const s = allSheets();
-    s.forEach((sh,i)=> setTimeout(()=> downloadCSV(slug(sh.name)+'-'+Y.year+'.csv', sh.rows), i*350));
+    s.forEach((sh,i)=> setTimeout(()=> downloadCSV(slug(sh.name)+'-'+yearLabel()+'.csv', sh.rows), i*350));
     toast('Downloading '+s.length+' files');
   };
   $('#impJson').onchange = e=>{
@@ -3184,7 +3599,8 @@ function renderData(el){
         const j = JSON.parse(rd.result);
         if(j.kind==='ledger-year' && j.data){
           const yr = parseInt(j.year,10) || parseInt(j.data.year,10) || new Date().getFullYear();
-          DB.years[String(yr)] = j.data; DB.active = String(yr);
+          const key = String(j.label || j.data.label || yr);
+          DB.years[key] = j.data; DB.active = key;
         } else if(j.years && typeof j.years==='object' && Object.keys(j.years).length){
           DB = j; if(!DB.years[DB.active]) DB.active = Object.keys(DB.years)[0];
         } else { toast('That doesn\'t look like a Ledger backup file'); e.target.value=''; return; }
@@ -3219,8 +3635,9 @@ function renderData(el){
     Y = DB.years[DB.active]; save(); render();
   });
   $('#newYear2').onclick = newYear;
+  $('#dupYear').onclick = duplicateYear;
   const loadDemo = ()=>{
-    if(!isBlankYear(Y) && !confirm('This replaces everything entered for '+Y.year+' with the fictional demo data. Continue?')) return;
+    if(!isBlankYear(Y) && !confirm('This replaces everything entered for '+yearLabel()+' with the fictional demo data. Continue?')) return;
     try{
       const data = JSON.parse(DEMO_YEAR_JSON);
       data.year = Y.year;   // land it under whichever year slot is open, not always 2026
@@ -3245,6 +3662,24 @@ function renderData(el){
 }
 
 /* ---------------- year management ---------------- */
+/* A full copy of the current year under a new label - for "what if things change in
+   March" scenarios, or just a safe sandbox to try figures in. Everything comes across,
+   transactions included, because the point is to compare like with like. */
+function duplicateYear(){
+  const suggested = yearKey(yearLabel()+'-2');
+  const input = prompt('Name for the copy (everything in '+yearLabel()+' is copied across):', suggested);
+  if(input===null) return;
+  const label = String(input).trim();
+  if(!label){ toast('Needs a name'); return; }
+  const key = yearKey(label);
+  const copy = JSON.parse(JSON.stringify(Y));
+  copy.label = label;
+  DB.years[key] = copy;
+  DB.active = key;
+  Y = copy; CUR = safeCur(Y.currency);
+  save(); render();
+  toast('Copied to '+label);
+}
 function newYear(){
   const years = Object.keys(DB.years).map(Number);
   const suggested = Math.max(...years)+1;
@@ -3304,6 +3739,7 @@ function init(){
   window.addEventListener('pagehide', flushSave);
   document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden') flushSave(); });
   setStatus('Ready');
+  try{ checkRenewals(); }catch(e){ console.warn('renewal check failed', e); }
 }
 init();
 </script></body></html>
