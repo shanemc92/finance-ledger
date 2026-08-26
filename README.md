@@ -74,10 +74,11 @@ now against weekly disposable income during the leave, using the same bill split
 and there is a toggle to stop their savings for the period to bridge the gap.
 
 **Contracts** - end dates for anything with a fixed term: broadband, insurance, energy, mobile.
-Anything inside 60 days shows on the dashboard, and it can optionally push alerts to
-[ntfy](https://ntfy.sh) at 60, 30, 14 and 7 days out, using ntfy.sh or your own server. One alert
-per contract per milestone, checked when the app opens. This is the only part of the app that
-talks to the internet, and only once you switch it on and give it a topic.
+Anything inside 60 days shows on the dashboard, so it's in front of you whenever you open the app,
+and "Renewed" rolls the date on a year once you've sorted it. There are deliberately no push
+notifications: nothing here runs unless the page is open, so an alert could only ever fire at the
+moment you're already looking at the dashboard that lists it. If you want reminders that arrive on
+their own, put the renewal dates in a real calendar.
 
 **History** - a log of what bills actually cost month by month, kept across years, so next year's
 budget is set from real numbers instead of guesses.
