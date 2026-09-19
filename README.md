@@ -259,13 +259,19 @@ matters when the savings sit somewhere you would rather not touch.
 
 Irish conventions, and where they stop:
 
-- Interest accrues **daily on the cleared balance at 1/365th of the annual rate** and is charged
-  monthly, which is how Irish lenders quote it. A period that straddles a rate change is split at
-  the change date and charged at both rates for the days on each side.
-- The repayment is solved with the monthly rate implied by that daily accrual, so a schedule left
-  alone lands on zero at the end of the term. **Day-count and rounding conventions differ between
-  lenders and none of them publish theirs**, so a model on its own drifts by a few euro a year -
-  against a real Irish mortgage, around 20 a year on 370k.
+- **How the interest is worked out is a setting, because lenders genuinely differ.** Two options:
+  *daily, 1/365th* accrues on the cleared balance every day and splits a period that straddles a
+  rate change at the change date, which is what most lenders describe; *monthly, 1/12th* charges a
+  flat twelfth of the annual rate at each payment and counts no days at all, which is what a good
+  number of them actually do. On a 370k balance the two are about 20 a year apart. The stub between
+  drawdown and the first payment is charged daily either way, which is universal.
+- If every statement's interest comes out **the same amount off in the same direction**, that is
+  the wrong setting rather than an error - switch it and watch the column. Tested against a real
+  EBS mortgage, daily left roughly 22 a year unexplained and monthly tied out to the cent on all
+  four annual statements.
+- The repayment is solved with the monthly rate that matches the setting, so a schedule left alone
+  lands on zero at the end of the term. Because a repayment is a whole number of cents it never
+  divides a balance exactly, so the final payment takes up the few euro left over.
 - **Statements are readings, not payments.** The monthly payments are always modelled; what a
   statement does is pin the balance. Everything modelled since the statement before it is adjusted
   onto the figure the lender printed, and the adjustment is shown so you can see how much drift it

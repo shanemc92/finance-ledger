@@ -474,6 +474,7 @@ function migrate(y){
     // mortgage protection and home insurance were separate fields; they are one line now
     if(blankish(m.insuranceMonthly)) m.insuranceMonthly = round2(num(m.lifeMonthly) + num(m.homeMonthly));
     delete m.lifeMonthly; delete m.homeMonthly;
+    m.basis = basisOf(m);                                    // daily 1/365 unless told otherwise
   });
   if(!y.accounts) y.accounts = [];
   if(!y.payees) y.payees = [];
@@ -963,11 +964,22 @@ function calcRepayment(loan){
    alone drifts by a few euro a year - the adjustments are what keep it honest. */
 const MORT_BASIS = 365;
 const RATE_KINDS = {fixed:'Fixed', variable:'Variable', tracker:'Tracker'};
+/* How the lender works out the interest it charges, which is not a detail: on a 370k
+   balance the difference between these is about 20 a year, one way or the other, and
+   it is the thing to change first if every statement comes out the same amount off.
+   "Monthly" charges a flat twelfth of the annual rate at each payment and does no day
+   counting at all, which is what a lot of Irish lenders actually do despite quoting a
+   daily rate. The stub between drawdown and the first payment is always daily. */
+/* listed separately because object keys that look like integers sort numerically, which
+   would put the non-default option first in the dropdown */
+const MORT_BASES = {'365':'Daily, 1/365th', '12':'Monthly, 1/12th'};
+const MORT_BASIS_ORDER = ['365','12'];
+const basisOf = m => MORT_BASES[String(m && m.basis)] ? String(m.basis) : '365';
 
 function blankMortgage(){
   const today = iso(new Date());
   return {id:uid(), name:'Home mortgage', lender:'', startDate:today,
-    principal:0, termMonths:360, propertyValue:0, repayment:0,
+    principal:0, termMonths:360, propertyValue:0, repayment:0, basis:'365',
     rates:[{id:uid(), from:today, rate:3.9, kind:'fixed'}],
     overpayMonthly:0, overpayFrom:'', allowancePct:10,
     insuranceMonthly:0, lumps:[], statements:[]};
@@ -986,24 +998,28 @@ function mortRateAt(m, date){
   for(const r of rs){ const d = parseDate(r.from); if(d && d<=date) cur = r; else break; }
   return cur;
 }
-/* Level repayment that clears `bal` over `months`, at the monthly rate implied by
-   daily accrual so a schedule left alone lands on zero at the end of the term. */
-function mortPayment(bal, annualPct, months){
+/* Level repayment that clears `bal` over `months`, using the monthly rate that matches
+   how the lender charges, so a schedule left alone lands on zero at the end of the term. */
+function mortPayment(bal, annualPct, months, basis){
   if(months<=0 || bal<=0.005) return 0;
-  const i = Math.pow(1 + num(annualPct)/100/MORT_BASIS, MORT_BASIS/12) - 1;
+  const b = MORT_BASES[String(basis)] ? String(basis) : '365';
+  const i = b==='12' ? num(annualPct)/100/12
+          : Math.pow(1 + num(annualPct)/100/MORT_BASIS, MORT_BASIS/12) - 1;
   if(i<=0) return round2(bal/months);
   return round2(bal*i/(1-Math.pow(1+i,-months)));
 }
 /* Interest between two dates, split at any rate change in between. The balance does
-   not move between payments, so summing each segment's days is exact. */
+   not move between payments, so summing each segment's days is exact. Only the daily
+   bases come through here; a monthly lender charges per payment, not per day. */
 function mortInterest(m, bal, from, to){
   if(bal<=0.005 || !(to>from)) return 0;
+  const div = MORT_BASIS;
   const rs = mortRates(m);
   let total = 0, cursor = new Date(from.getTime());
   while(cursor < to){
     let next = to;
     for(const r of rs){ const d = parseDate(r.from); if(d && d>cursor && d<next){ next = d; break; } }
-    total += bal * (num(mortRateAt(m,cursor).rate)/100/MORT_BASIS) * daysBetween(cursor,next);
+    total += bal * (num(mortRateAt(m,cursor).rate)/100/div) * daysBetween(cursor,next);
     cursor = next;
   }
   return round2(total);
@@ -1034,6 +1050,9 @@ function mortgageSchedule(m, opts){
   const overAmt = opts.noExtra ? 0 : num(m.overpayMonthly);
   const overFrom = parseDate(m.overpayFrom);
   const insMonthly = num(m.insuranceMonthly);
+  const basis = basisOf(m);
+  const monthly = basis === '12';   // charged per payment, not per day
+  let payCount = 0;
 
   let bal = principal, cursor = new Date(start.getTime()), li = 0, si = 0, n = 0;
   let interestTotal = 0, paidTotal = 0, extraTotal = 0, insTotal = 0;
@@ -1043,18 +1062,21 @@ function mortgageSchedule(m, opts){
   /* A lump sum landing mid-month reduces the balance for the rest of that month, but
      the interest it saves is not charged until the monthly charge date. Walking the
      gap in segments split at each lump keeps both of those true. */
-  const advance = (from, to)=>{
+  const advance = (from, to, charge)=>{
     let acc = 0, lump = 0; const notes = [];
     let seg = new Date(from.getTime());
     while(li < lumps.length && lumps[li].date <= to){
       const L = lumps[li];
       const at = L.date < seg ? seg : L.date;
-      acc += mortInterest(m, bal, seg, at);
+      if(charge==='daily') acc += mortInterest(m, bal, seg, at);
       bal = round2(Math.max(0, bal - L.amount));
       lump += L.amount; if(L.note) notes.push(L.note);
       seg = at; li++;
     }
-    acc += mortInterest(m, bal, seg, to);
+    /* A monthly lender charges a flat twelfth at the payment and counts no days, so the
+       lump is off the balance before the charge is worked out. */
+    if(charge==='monthly') acc = bal * num(mortRateAt(m,to).rate)/100/12;
+    else if(charge==='daily') acc += mortInterest(m, bal, seg, to);
     return {interest:round2(acc), lump:round2(lump), note:notes.join('; ')};
   };
 
@@ -1069,7 +1091,10 @@ function mortgageSchedule(m, opts){
           (inclusive ? stmts[si].date <= upto : stmts[si].date < upto)){
       const s = stmts[si++];
       const opening = bal, from = new Date(cursor.getTime());
-      const ev = advance(cursor, s.date);
+      /* Under a monthly basis nothing accrues between payments, so a statement date
+         carries no interest of its own - except the drawdown stub, before any payment
+         has been taken, which every lender charges daily. */
+      const ev = advance(cursor, s.date, (monthly && payCount>0) ? 'none' : 'daily');
       const modelled = round2(bal + ev.interest);
       const adjust = s.balance===null ? 0 : round2(s.balance - modelled);
       bal = s.balance===null ? modelled : s.balance;
@@ -1102,11 +1127,11 @@ function mortgageSchedule(m, opts){
          because re-solving is exactly what the lender does at that point. */
       if(rateKey !== null) stated = false;
       rateKey = key;
-      repayment = stated ? num(m.repayment) : mortPayment(bal, r.rate, Math.max(1, term-k+1));
+      repayment = stated ? num(m.repayment) : mortPayment(bal, r.rate, Math.max(1, term-k+1), basis);
     }
     const opening = bal, from = new Date(cursor.getTime());
-    const shownRate = num(mortRateAt(m, from).rate);          // the rate this row's interest was earned at
-    const ev = advance(cursor, payDate);
+    const shownRate = num(mortRateAt(m, monthly ? payDate : from).rate);
+    const ev = advance(cursor, payDate, monthly ? 'monthly' : 'daily');
     const over = (!overFrom || payDate >= overFrom) ? overAmt : 0;
     let pay = round2(repayment + over);
     const due = round2(bal + ev.interest);
@@ -1117,7 +1142,13 @@ function mortgageSchedule(m, opts){
         actual:false, stalled:true});
       out.stalled = true; break;
     }
-    if(pay > due) pay = due;                                  // final payment is whatever is left
+    /* The repayment is a whole number of cents, so it never divides the balance exactly
+       and a few euro are left after the last scheduled payment - enough to spawn a whole
+       extra row for 3 quid. A lender clears that with the final payment, so if less than
+       a tenth of a payment would be left over, this one takes it. A real shortfall, from
+       a rate rise the repayment never caught up with, is far bigger than that and still
+       runs on into the extra rows it deserves. */
+    if(pay > due || due - pay < pay*0.1) pay = due;
     const principalPaid = round2(pay - ev.interest);
     bal = round2(bal - principalPaid);
     if(bal < 0.005) bal = 0;
@@ -1127,7 +1158,7 @@ function mortgageSchedule(m, opts){
       interest:ev.interest, principal:principalPaid, payment:pay, insurance:insMonthly,
       extra:round2(over+ev.lump), balance:bal, note:ev.note});
     interestTotal += ev.interest; paidTotal += pay + ev.lump; extraTotal += over + ev.lump;
-    insTotal += insMonthly;
+    insTotal += insMonthly; payCount++;
     sinceInterest = round2(sinceInterest + ev.interest);
     sincePaid = round2(sincePaid + pay + ev.lump);
     cursor = payDate; k++;
@@ -2343,7 +2374,9 @@ function renderMortgage(el){
         <label class="f"><span>Property value</span><input class="num" data-path="mortgages.${i}.propertyValue" data-type="number" value="${num(m.propertyValue)}"></label>
         <label class="f"><span>Overpayment / month</span><input class="num" data-path="mortgages.${i}.overpayMonthly" data-type="number" value="${num(m.overpayMonthly)}"></label>
         <label class="f"><span>Overpayment starts</span><input type="date" data-path="mortgages.${i}.overpayFrom" value="${esc(m.overpayFrom||'')}"></label>
-        <label class="f"><span>Insurance with the payment / month</span><input class="num" data-path="mortgages.${i}.insuranceMonthly" data-type="number" value="${num(m.insuranceMonthly)}"></label>
+        <label class="f"><span>Insurance / month</span><input class="num" data-path="mortgages.${i}.insuranceMonthly" data-type="number" value="${num(m.insuranceMonthly)}"></label>
+        <label class="f"><span>Interest charged</span><select data-path="mortgages.${i}.basis">${MORT_BASIS_ORDER.map(b=>
+          `<option value="${b}" ${b===basisOf(m)?'selected':''}>${MORT_BASES[b]}</option>`).join('')}</select></label>
         <label class="f"><span>Fixed overpay allowance %</span><input class="num" data-path="mortgages.${i}.allowancePct" data-type="number" step="0.5" value="${num(m.allowancePct)}"></label>
       </div>
       <div class="note">${term? Math.floor(term/12)+'y '+(term%12)+'m term':'Set a term'}${
@@ -2429,7 +2462,8 @@ function renderMortgage(el){
         <span class="note" style="margin:0">Only the date and the balance matter. Everything since the statement
           before it is adjusted onto that balance, so an annual statement is enough to keep years of modelling
           honest - the adjustment column is the drift it took out. Interest and paid are optional, purely to check
-          the model against: a few euro a year apart is day-count convention, hundreds means a wrong rate or date.</span>
+          the model against. If the interest comes out the same amount off every year, that is the wrong
+          "interest charged" setting above rather than an error - try the other one and watch this column.</span>
       </div>
 
       <h3 style="margin:16px 0 6px;font-size:14px">Lump sums</h3>
@@ -3937,7 +3971,8 @@ function mortgageCSV(m){
     blankish(r.statedBalance)?'':r.statedBalance, r.statement?r.adjust:'', r.note||'']));
   rows.push([]);
   rows.push(['Borrowed',num(m.principal),'Drawdown',m.startDate||'','Term (months)',num(m.termMonths)]);
-  rows.push(['Insurance with the payment',num(m.insuranceMonthly),'Adjusted by statements',s.adjusted]);
+  rows.push(['Insurance',num(m.insuranceMonthly),'Interest charged',MORT_BASES[basisOf(m)],
+    'Adjusted by statements',s.adjusted]);
   rows.push(['Rate schedule']);
   rows.push(['From','Rate %','Type']);
   mortRates(m).forEach(r=> rows.push([r.from, num(r.rate), RATE_KINDS[r.kind]||r.kind||'']));
