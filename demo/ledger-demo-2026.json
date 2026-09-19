@@ -72,10 +72,6 @@
      {
       "name": "Employee Tax Credit",
       "amount": 2000
-     },
-     {
-      "name": "Rent Tax Credit",
-      "amount": 1000
      }
     ]
    }
@@ -85,10 +81,10 @@
   "bills": [
    {
     "id": "b0",
-    "name": "Rent",
+    "name": "Mortgage",
     "freq": "Monthly",
     "holder": "Joint",
-    "amount": 1450,
+    "amount": 1518.02,
     "nextDue": "2026-09-01",
     "kind": "bill"
    },
@@ -328,7 +324,7 @@
    },
    {
     "id": "b27",
-    "name": "House Deposit",
+    "name": "Home Improvements",
     "freq": "Monthly",
     "holder": "Joint",
     "amount": 450,
@@ -400,6 +396,111 @@
     "extras": {}
    }
   ],
+  "mortgages": [
+   {
+    "id": "mtg1",
+    "name": "Home mortgage",
+    "lender": "AIB",
+    "startDate": "2023-09-01",
+    "principal": 295000,
+    "termMonths": 360,
+    "propertyValue": 385000,
+    "repayment": 1418.02,
+    "rates": [
+     {
+      "id": "mr1",
+      "from": "2023-09-01",
+      "rate": 4.05,
+      "kind": "fixed"
+     },
+     {
+      "id": "mr2",
+      "from": "2026-12-01",
+      "rate": 3.85,
+      "kind": "variable"
+     }
+    ],
+    "overpayMonthly": 100,
+    "overpayFrom": "2026-01-01",
+    "allowancePct": 10,
+    "lifeMonthly": 38,
+    "homeMonthly": 28,
+    "lumps": [
+     {
+      "id": "ml1",
+      "date": "2025-07-10",
+      "amount": 3000,
+      "note": "Wedding gift money"
+     }
+    ],
+    "statements": [
+     {
+      "id": "ms1",
+      "date": "2026-01-01",
+      "amount": 1518.02,
+      "interest": "",
+      "balance": "",
+      "note": "First payment of the year"
+     },
+     {
+      "id": "ms2",
+      "date": "2026-02-01",
+      "amount": 1518.02,
+      "interest": "",
+      "balance": "",
+      "note": ""
+     },
+     {
+      "id": "ms3",
+      "date": "2026-03-01",
+      "amount": 1518.02,
+      "interest": "",
+      "balance": "",
+      "note": ""
+     },
+     {
+      "id": "ms4",
+      "date": "2026-04-01",
+      "amount": 1518.02,
+      "interest": "",
+      "balance": "",
+      "note": ""
+     },
+     {
+      "id": "ms5",
+      "date": "2026-05-01",
+      "amount": 1518.02,
+      "interest": "",
+      "balance": "",
+      "note": ""
+     },
+     {
+      "id": "ms6",
+      "date": "2026-06-01",
+      "amount": 1518.02,
+      "interest": "",
+      "balance": "",
+      "note": ""
+     },
+     {
+      "id": "ms7",
+      "date": "2026-07-01",
+      "amount": 1518.02,
+      "interest": "",
+      "balance": "",
+      "note": ""
+     },
+     {
+      "id": "ms8",
+      "date": "2026-08-01",
+      "amount": 1518.02,
+      "interest": "",
+      "balance": 275409.74,
+      "note": "Checked against the August statement"
+     }
+    ]
+   }
+  ],
   "savings": {
    "startDate": "2026-01-01",
    "months": 36,
@@ -412,7 +513,7 @@
      "adjust": {}
     },
     {
-     "name": "House Deposit",
+     "name": "Home Improvements",
      "opening": 21500,
      "monthly": 450,
      "adjust": {}
@@ -433,8 +534,8 @@
   },
   "rules": [
    {
-    "match": "D/D CORK CITY LETTING",
-    "category": "Rent"
+    "match": "D/D AIB MORTGAGE",
+    "category": "Mortgage"
    },
    {
     "match": "D/D LITTLE ACORNS CRECHE",
@@ -574,7 +675,7 @@
    },
    {
     "match": "SO HOUSE DEPOSIT",
-    "category": "House Deposit"
+    "category": "Home Improvements"
    },
    {
     "match": "SO KIDS CU",
@@ -618,9 +719,9 @@
    },
    {
     "date": "2026-01-01",
-    "desc": "D/D CORK CITY LETTING",
+    "desc": "D/D AIB MORTGAGE",
     "desc2": "",
-    "debit": 1450,
+    "debit": 1518.02,
     "credit": 0,
     "balance": "",
     "type": "Direct Debit",
@@ -1118,9 +1219,9 @@
    },
    {
     "date": "2026-02-01",
-    "desc": "D/D CORK CITY LETTING",
+    "desc": "D/D AIB MORTGAGE",
     "desc2": "",
-    "debit": 1450,
+    "debit": 1518.02,
     "credit": 0,
     "balance": "",
     "type": "Direct Debit",
@@ -1638,9 +1739,9 @@
    },
    {
     "date": "2026-03-01",
-    "desc": "D/D CORK CITY LETTING",
+    "desc": "D/D AIB MORTGAGE",
     "desc2": "",
-    "debit": 1450,
+    "debit": 1518.02,
     "credit": 0,
     "balance": "",
     "type": "Direct Debit",
@@ -2148,9 +2249,9 @@
    },
    {
     "date": "2026-04-01",
-    "desc": "D/D CORK CITY LETTING",
+    "desc": "D/D AIB MORTGAGE",
     "desc2": "",
-    "debit": 1450,
+    "debit": 1518.02,
     "credit": 0,
     "balance": "",
     "type": "Direct Debit",
@@ -2658,9 +2759,9 @@
    },
    {
     "date": "2026-05-01",
-    "desc": "D/D CORK CITY LETTING",
+    "desc": "D/D AIB MORTGAGE",
     "desc2": "",
-    "debit": 1450,
+    "debit": 1518.02,
     "credit": 0,
     "balance": "",
     "type": "Direct Debit",
@@ -3198,9 +3299,9 @@
    },
    {
     "date": "2026-06-01",
-    "desc": "D/D CORK CITY LETTING",
+    "desc": "D/D AIB MORTGAGE",
     "desc2": "",
-    "debit": 1450,
+    "debit": 1518.02,
     "credit": 0,
     "balance": "",
     "type": "Direct Debit",
@@ -3708,9 +3809,9 @@
    },
    {
     "date": "2026-07-01",
-    "desc": "D/D CORK CITY LETTING",
+    "desc": "D/D AIB MORTGAGE",
     "desc2": "",
-    "debit": 1450,
+    "debit": 1518.02,
     "credit": 0,
     "balance": "",
     "type": "Direct Debit",
@@ -4218,9 +4319,9 @@
    },
    {
     "date": "2026-08-01",
-    "desc": "D/D CORK CITY LETTING",
+    "desc": "D/D AIB MORTGAGE",
     "desc2": "",
-    "debit": 1450,
+    "debit": 1518.02,
     "credit": 0,
     "balance": "",
     "type": "Direct Debit",
@@ -5276,7 +5377,7 @@
    },
    {
     "id": "a4",
-    "name": "House deposit",
+    "name": "Home improvements",
     "owner": "Joint",
     "bank": "An Post",
     "type": "Savings",

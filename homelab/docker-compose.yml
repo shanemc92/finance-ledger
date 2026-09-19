@@ -1,0 +1,20 @@
+services:
+  finance-ledger:
+    image: ghcr.io/shanemc92/finance-ledger:latest
+    # To build locally instead of pulling, comment the image line above, uncomment
+    # these, and run `docker compose up -d --build`. The context is the repo root
+    # because the image serves the index.html that lives there:
+    # build:
+    #   context: ..
+    #   dockerfile: homelab/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      # Uncomment and set this if the container is reachable from anything
+      # other than a network/VPN you already trust:
+      # - AUTH_TOKEN=change-me
+      PORT: "8080"
+      DATA_DIR: "/data"

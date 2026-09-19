@@ -1,0 +1,3 @@
+# The live ledger the homelab server writes - never commit this.
+/data/
+homelab/data/

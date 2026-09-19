@@ -9,6 +9,9 @@ A two-income household for 2026:
 - 27 bills and 3 savings commitments, across weekly, monthly, quarterly and annual frequencies
 - 401 bank transactions from January to 20 August, 45 distinct merchants, with 38 category rules
   that apply themselves on load
+- A mortgage: 295,000 drawn down in September 2023 over 30 years, fixed at 4.05% until December
+  2026 and then on a 3.85% variable rate, with a 100 a month overpayment, one lump sum, and the
+  eight 2026 statements recorded so the year to date is what the lender actually charged
 - 3 loans, including one with lump-sum overpayments modelled
 - 4 savings accounts projected over 36 months
 - 5 bank accounts and 4 payees, with valid test IBANs

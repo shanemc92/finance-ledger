@@ -43,6 +43,17 @@ payments earlier it clears. Set the date the overpayment started and it works ou
 actually stands today - what is still owed, and what interest is yet to be charged between now and
 the final payment.
 
+**Mortgage** - kept apart from Loans because a mortgage does not behave like one. Interest accrues
+daily on the cleared balance and the repayment is not a figure you choose: the lender re-solves it
+over whatever is left of the original term every time the rate changes. Put the whole rate schedule
+in - the fix you drew down on, the follow-on rate dated the day it ends - and the table tells you
+what the repayment becomes when you roll off. Record each statement as it arrives and the history
+stops being a model of what the lender charged and becomes what it actually charged, with the
+projection carrying on from the last one. Overpayments and lump sums shorten the term rather than
+the payment, a lump comes off from its own date, and the whole thing is costed against the same
+mortgage with the overpayments taken back out so "interest saved" means something. See
+[Mortgage](#mortgage-notes) below.
+
 **Bank** - import a CSV statement (AIB export format, or anything with date/description/debit
 columns - headers are matched automatically). Rules map descriptions to categories, duplicates are
 skipped on re-import, and everything rolls up against the budget with weekly and monthly averages.
@@ -138,6 +149,21 @@ static site work:
   root is all either one needs.
 - **Your own web space or static server**: upload `index.html` and point your domain at it.
 
+### 4. Self-host it with sync between machines
+
+Everything above keeps your data in one browser on one device. If you have somewhere to run a
+container, [`homelab/`](homelab/) is a small server that reads and writes a JSON file on your own
+machine instead, so the same ledger follows you between devices with no exporting and importing.
+It serves this same `index.html` - the sync code is already in it and stays dormant everywhere
+else:
+
+```bash
+docker run -d --name finance-ledger -p 8080:8080 -v /srv/finance-ledger:/data ghcr.io/shanemc92/finance-ledger:latest
+```
+
+`amd64` and `arm64`, no login of its own - put it on your LAN or behind whatever auth you already
+run. See [homelab/README.md](homelab/README.md) for the details and the security notes.
+
 ### A note on your data either way
 
 However you run it, your entries stay on that one device, in that one browser. Switching phones,
@@ -148,9 +174,9 @@ same Data tab, in reverse.
 
 ## Try it with demo data
 
-`demo/ledger-demo-2026.json` is a fictional two-income household: 401 transactions, three loans,
-four savings accounts, five bank accounts, four payees, a year of smart meter usage and two years
-of bill history. Nothing in it is real.
+`demo/ledger-demo-2026.json` is a fictional two-income household: 401 transactions, a mortgage part
+way through a fixed rate, three loans, four savings accounts, five bank accounts, four payees, a
+year of smart meter usage and two years of bill history. Nothing in it is real.
 
 1. Open `index.html`
 2. Data tab -> **Load demo data**
@@ -165,17 +191,23 @@ The same file also sits at `demo/ledger-demo-2026.json` if you'd rather restore 
 Everything is held in `localStorage` under a single key. It is never transmitted, and there is no
 analytics, no telemetry and no fonts or scripts loaded from anywhere.
 
+The one request the page makes is to its own address, once, on open: it asks whether it is being
+served by a [self-hosted ledger server](homelab/) that wants to sync. That request carries none of
+your data, and on GitHub Pages - or any other static host, or the file opened off a disk - nothing
+answers it and the page carries on with `localStorage` alone, making no further requests.
+
 That also means clearing site data wipes it, so take backups:
 
 - **All years (JSON)** - full backup, restores everything
 - **Single year (JSON)** - move one year between browsers or share a scenario
 - **Workbook (.xlsx)** - a sheet per section (bills, savings commitments, savings split, tax, bank
   analysis, transactions, rules, savings projection, history, accounts, payees, electricity usage,
-  offers and profile, plus one per loan), written natively without a library
+  offers and profile, plus one per loan and one per mortgage), written natively without a library
 - **CSV** - per section, if you want to pull something into a spreadsheet
 
-"+ Year" rolls bills, loans, savings, rules, people, accounts, payees, electricity tariffs and the
-maternity plan into a new year, applies that year's tax figures, and starts transactions and meter usage empty.
+"+ Year" rolls bills, loans, the mortgage, savings, rules, people, accounts, payees, electricity
+tariffs and the maternity plan into a new year, applies that year's tax figures, and starts
+transactions and meter usage empty.
 
 **Duplicate** takes a complete copy of the current year under a new name - "2026-2", say - so you
 can put in changed figures halfway through a year, or keep a couple of what-if scenarios side by
@@ -221,6 +253,38 @@ does not try to predict that, so treat the shortfall as the cautious figure.
 Pausing savings closes the monthly cash gap but does not change where the household ends up - the
 money either goes into a savings account or stays in the current account to pay the bills. It
 matters when the savings sit somewhere you would rather not touch.
+
+## Mortgage notes
+
+Irish conventions, and where they stop:
+
+- Interest accrues **daily on the cleared balance at 1/365th of the annual rate** and is charged
+  monthly, which is how Irish lenders quote it. A period that straddles a rate change is split at
+  the change date and charged at both rates for the days on each side.
+- The repayment is solved with the monthly rate implied by that daily accrual, so a schedule left
+  alone lands on zero at the end of the term. **Day-count and rounding conventions differ between
+  lenders and none of them publish theirs**, so expect a few cents of drift against a real
+  statement rather than an exact tie-out. That is what the "vs ours" column is for: cents are
+  rounding, hundreds mean a rate or a date is wrong.
+- When the rate changes the repayment is recalculated over the payments remaining out of the
+  **original** term - the term does not stretch. Overpaying does the opposite: the repayment stays
+  put and the term shortens, which is the Irish default unless you ask to re-amortise.
+- Picking up mid-mortgage, put the repayment from your statement in the "repayment now" box. After
+  a few overpayments the lender is still collecting the contractual amount, not one re-solved off
+  the lower balance, and only your statement knows what that is. Leave it at 0 and it is worked out
+  from the rate and the term.
+- Fixed rates cap what you can overpay in a year before a break funding fee applies - commonly 10%,
+  but it varies and it is in your loan offer, so the allowance is editable and going over only ever
+  warns. **The fee itself is not estimated**: it depends on funding rates on the day, and guessing
+  it would be worse than leaving it to you to ask.
+- Mortgage protection and home insurance are there because they are not optional in practice, but
+  they only feed the "monthly outlay" figure - they are not interest and not part of the balance.
+- Nothing on this tab feeds the Budget tab. Add the repayment there as a bill if you want it in the
+  household budget.
+
+Mortgages are deliberately left out of the dashboard's "loans still to pay" figure and given their
+own, because a 300k mortgage swamps a car loan and makes that number useless for the thing it is
+there for.
 
 ## Electricity notes
 
