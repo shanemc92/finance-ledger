@@ -119,3 +119,15 @@ server.listen(PORT, () => {
   console.log('data file: ' + DATA_FILE);
   if (!AUTH_TOKEN) console.log('AUTH_TOKEN not set - anyone who can reach this port can read/write your data file.');
 });
+
+/* Node runs as PID 1 in the container, and PID 1 gets no default signal handlers: with
+ * nothing registered here, SIGTERM is ignored outright and every `docker compose up -d`
+ * sits out the full stop timeout waiting on a SIGKILL before the old container dies.
+ * Closing the server also lets a save that is already in flight finish writing. */
+function shutdown() {
+  server.close(() => process.exit(0));
+  // a browser holding a keep-alive connection open should not stall the exit
+  setTimeout(() => process.exit(0), 2000).unref();
+}
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
