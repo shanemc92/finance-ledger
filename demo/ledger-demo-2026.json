@@ -423,8 +423,7 @@
     "overpayMonthly": 100,
     "overpayFrom": "2026-01-01",
     "allowancePct": 10,
-    "lifeMonthly": 38,
-    "homeMonthly": 28,
+    "insuranceMonthly": 38,
     "lumps": [
      {
       "id": "ml1",
@@ -436,67 +435,27 @@
     "statements": [
      {
       "id": "ms1",
-      "date": "2026-01-01",
-      "amount": 1518.02,
-      "interest": "",
-      "balance": "",
-      "note": "First payment of the year"
+      "date": "2023-12-31",
+      "amount": 4254.06,
+      "interest": 3964.53,
+      "balance": 294710.47,
+      "note": "First statement, four months in"
      },
      {
       "id": "ms2",
-      "date": "2026-02-01",
-      "amount": 1518.02,
-      "interest": "",
-      "balance": "",
+      "date": "2024-12-31",
+      "amount": 17016.24,
+      "interest": 11839.54,
+      "balance": 289533.77,
       "note": ""
      },
      {
       "id": "ms3",
-      "date": "2026-03-01",
-      "amount": 1518.02,
-      "interest": "",
-      "balance": "",
-      "note": ""
-     },
-     {
-      "id": "ms4",
-      "date": "2026-04-01",
-      "amount": 1518.02,
-      "interest": "",
-      "balance": "",
-      "note": ""
-     },
-     {
-      "id": "ms5",
-      "date": "2026-05-01",
-      "amount": 1518.02,
-      "interest": "",
-      "balance": "",
-      "note": ""
-     },
-     {
-      "id": "ms6",
-      "date": "2026-06-01",
-      "amount": 1518.02,
-      "interest": "",
-      "balance": "",
-      "note": ""
-     },
-     {
-      "id": "ms7",
-      "date": "2026-07-01",
-      "amount": 1518.02,
-      "interest": "",
-      "balance": "",
-      "note": ""
-     },
-     {
-      "id": "ms8",
-      "date": "2026-08-01",
-      "amount": 1518.02,
-      "interest": "",
-      "balance": 275409.74,
-      "note": "Checked against the August statement"
+      "date": "2025-12-31",
+      "amount": 17016.24,
+      "interest": 11532.2,
+      "balance": 281049.73,
+      "note": "After the July lump sum"
      }
     ]
    }

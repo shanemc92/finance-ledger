@@ -47,9 +47,10 @@ the final payment.
 daily on the cleared balance and the repayment is not a figure you choose: the lender re-solves it
 over whatever is left of the original term every time the rate changes. Put the whole rate schedule
 in - the fix you drew down on, the follow-on rate dated the day it ends - and the table tells you
-what the repayment becomes when you roll off. Record each statement as it arrives and the history
-stops being a model of what the lender charged and becomes what it actually charged, with the
-projection carrying on from the last one. Overpayments and lump sums shorten the term rather than
+what the repayment becomes when you roll off. Type in the balance off each statement as it arrives -
+once a year is plenty, which is all most lenders send - and the years of modelling in between are
+adjusted onto it, so the schedule tracks the real account instead of drifting away from it.
+Overpayments and lump sums shorten the term rather than
 the payment, a lump comes off from its own date, and the whole thing is costed against the same
 mortgage with the overpayments taken back out so "interest saved" means something. See
 [Mortgage](#mortgage-notes) below.
@@ -263,9 +264,16 @@ Irish conventions, and where they stop:
   the change date and charged at both rates for the days on each side.
 - The repayment is solved with the monthly rate implied by that daily accrual, so a schedule left
   alone lands on zero at the end of the term. **Day-count and rounding conventions differ between
-  lenders and none of them publish theirs**, so expect a few cents of drift against a real
-  statement rather than an exact tie-out. That is what the "vs ours" column is for: cents are
-  rounding, hundreds mean a rate or a date is wrong.
+  lenders and none of them publish theirs**, so a model on its own drifts by a few euro a year -
+  against a real Irish mortgage, around 20 a year on 370k.
+- **Statements are readings, not payments.** The monthly payments are always modelled; what a
+  statement does is pin the balance. Everything modelled since the statement before it is adjusted
+  onto the figure the lender printed, and the adjustment is shown so you can see how much drift it
+  took out. One statement a year - which is all most lenders send - is enough to keep years of
+  modelling honest, and an annual statement is *not* treated as a payment, which would otherwise
+  count the year twice over. The interest and amount off the statement are optional and purely to
+  check the model against: a few euro a year apart is day-count convention, hundreds means a wrong
+  rate or date.
 - When the rate changes the repayment is recalculated over the payments remaining out of the
   **original** term - the term does not stretch. Overpaying does the opposite: the repayment stays
   put and the term shortens, which is the Irish default unless you ask to re-amortise.
@@ -277,8 +285,9 @@ Irish conventions, and where they stop:
   but it varies and it is in your loan offer, so the allowance is editable and going over only ever
   warns. **The fee itself is not estimated**: it depends on funding rates on the day, and guessing
   it would be worse than leaving it to you to ask.
-- Mortgage protection and home insurance are there because they are not optional in practice, but
-  they only feed the "monthly outlay" figure - they are not interest and not part of the balance.
+- Insurance collected with the repayment - mortgage protection, home cover, whatever your lender
+  bundles into the direct debit - goes in as one figure. It makes the amount leaving the account
+  right without ever touching the balance, because it is not interest and not capital.
 - Nothing on this tab feeds the Budget tab. Add the repayment there as a bill if you want it in the
   household budget.
 
