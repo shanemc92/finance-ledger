@@ -2338,6 +2338,20 @@ function renderMortgage(el){
     $('#addMortgage').onclick = addMortgage;
     return;
   }
+  /* Statements and lump sums get entered in whatever order you find them, but they only
+     make sense read down the page in date order - and the engine sorts them anyway, so
+     an unsorted table just disagrees with the schedule below it. Sort the real arrays
+     rather than a copy, because the row inputs address records by index. A row whose
+     date has been cleared sorts last instead of jumping to the top mid-edit. */
+  const byDate = (a,b)=>{
+    const x = (a && a.date) || '9999', y = (b && b.date) || '9999';
+    return x < y ? -1 : x > y ? 1 : 0;
+  };
+  list.forEach(m=>{
+    if(Array.isArray(m.statements)) m.statements.sort(byDate);
+    if(Array.isArray(m.lumps)) m.lumps.sort(byDate);
+  });
+
   /* each of these is a full run through the life of the mortgage, so do them once
      here and reuse them in the KPIs, the rate table, the chart and the schedule */
   const calcs = list.map(m=>{
@@ -2353,9 +2367,12 @@ function renderMortgage(el){
     const savedInt = round2(base.interest - sch.interest);
     const sooner = base.payments - sch.payments;
     const outlay = pos.outlay;
+    /* the first actual payment on or after the step - statement rows carry no payment,
+       so landing on one shows a repayment of nothing, which a rate starting in the
+       drawdown month otherwise does every time */
     const stepAt = from =>{
       const d = parseDate(from); if(!d) return null;
-      return sch.rows.find(r=> parseDate(r.date) >= d) || null;
+      return sch.rows.find(r=> !r.statement && parseDate(r.date) >= d) || null;
     };
     return `<div class="card">
       <div class="row" style="margin-bottom:10px">
