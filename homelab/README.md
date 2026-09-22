@@ -84,9 +84,13 @@ Dockge, where the stack directory does not contain the repo:
 - **The server itself has no login.** It trusts whatever network it's bound to, same as most
   homelab static-file setups. Keep it on your LAN/VPN, or put it behind a reverse proxy with auth
   (Authelia, Tailscale, a basic-auth block, etc) if it's reachable from anywhere less trusted.
-- **`AUTH_TOKEN` is required.** A shared-secret check is built in and the server now refuses to
-  start without it, logging why. Set `AUTH_TOKEN` in the environment, or set `ALLOW_NO_AUTH=1` to
-  say explicitly that you want to run without one on a network you already trust. The token is
+- **The server will not start without an explicit auth decision.** Either set `AUTH_TOKEN` to a
+  shared secret, or set `ALLOW_NO_AUTH=1` to say you meant to run without one. Leaving both unset
+  is refused, with the reason logged - previously an unset token silently disabled the check.
+  The shipped `docker-compose.yml` sets `ALLOW_NO_AUTH=1`, because that deployment sits behind a
+  reverse proxy doing forward auth: every request is already authenticated before it reaches the
+  container, so a second secret adds nothing. Swap it for a real `AUTH_TOKEN` if you expose the
+  port anywhere the proxy does not cover. The token is
   compared with `crypto.timingSafeEqual` after a length check, so a wrong guess can't be narrowed
   down by timing. The page's `fetch`/`PUT` calls need to send it too - this is not currently wired
   into the page, so add an `Authorization: Bearer <token>` header in

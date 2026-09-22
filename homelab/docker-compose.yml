@@ -13,12 +13,21 @@ services:
     volumes:
       - ./data:/data
     environment:
-      # Required. The server refuses to start without it. Generate one with
-      # `openssl rand -hex 32` and put it in a .env file next to this compose
-      # file as AUTH_TOKEN=..., or set it in the shell before `docker compose up`.
-      AUTH_TOKEN: ${AUTH_TOKEN:?AUTH_TOKEN is not set - see homelab/README.md}
-      # To run without a token on a network you already trust, comment the line
-      # above out and uncomment this one instead:
-      # ALLOW_NO_AUTH: "1"
+      # The server will not start without one of AUTH_TOKEN or ALLOW_NO_AUTH,
+      # so that "no auth" is always a decision rather than an oversight.
+      #
+      # This deployment runs behind a reverse proxy with forward auth, which
+      # already authenticates every request before it reaches the container,
+      # so there is no second secret to check here.
+      ALLOW_NO_AUTH: "1"
+      # If you expose this port anywhere the proxy does not cover, swap the
+      # line above for a real token:
+      #
+      #   AUTH_TOKEN: ${AUTH_TOKEN:?AUTH_TOKEN is not set - see homelab/README.md}
+      #
+      # generated with `openssl rand -hex 32` and kept in a .env file next to
+      # this compose file. Note the page does not send the token yet - see the
+      # security notes in homelab/README.md before turning it on, or sync will
+      # start failing with 401s.
       PORT: "8080"
       DATA_DIR: "/data"
