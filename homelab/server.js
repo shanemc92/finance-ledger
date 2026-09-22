@@ -6,32 +6,65 @@
  *
  * This has no login of its own - it trusts whatever network it is bound to.
  * Put it behind your own reverse proxy / VPN / auth layer if it is reachable
- * from anywhere you would not also trust with the raw JSON file, and set
- * AUTH_TOKEN below if you want a shared-secret check on top of that.
+ * from anywhere you would not also trust with the raw JSON file.
+ *
+ * AUTH_TOKEN sets a shared-secret check on top of that and is required: the
+ * server refuses to start without it unless ALLOW_NO_AUTH=1 says you meant it.
  */
 'use strict';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const PORT = parseInt(process.env.PORT, 10) || 8080;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'finance-ledger-current.json');
 const DATA_URL_PATH = '/data/finance-ledger-current.json';
-const AUTH_TOKEN = process.env.AUTH_TOKEN || '';      // optional shared secret
+const AUTH_TOKEN = process.env.AUTH_TOKEN || '';
+const ALLOW_NO_AUTH = process.env.ALLOW_NO_AUTH === '1';
 const MAX_BODY_BYTES = 25 * 1024 * 1024;              // generous ceiling for a ledger export
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8',
   '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
 
+// Running with no token at all leaves the data file readable and writable by
+// anything that can reach the port. That may be what you want on a trusted LAN,
+// but it should be a deliberate choice rather than the default you get by
+// forgetting to set a variable.
+if (!AUTH_TOKEN && !ALLOW_NO_AUTH) {
+  console.error('AUTH_TOKEN is not set.');
+  console.error('Anyone who can reach this port could read and overwrite your ledger.');
+  console.error('Set AUTH_TOKEN to a shared secret, or set ALLOW_NO_AUTH=1 to run without one.');
+  process.exit(1);
+}
+
 fs.mkdirSync(DATA_DIR, { recursive: true });
+
+const AUTH_HEADER = Buffer.from('Bearer ' + AUTH_TOKEN, 'utf8');
 
 function authOk(req) {
   if (!AUTH_TOKEN) return true;
-  return req.headers['authorization'] === 'Bearer ' + AUTH_TOKEN;
+  const supplied = req.headers['authorization'];
+  if (typeof supplied !== 'string') return false;
+  const given = Buffer.from(supplied, 'utf8');
+  // timingSafeEqual throws on a length mismatch, so the lengths are compared
+  // first. That leaks the token's length, which is not worth protecting; what
+  // matters is not leaking its contents one byte at a time.
+  if (given.length !== AUTH_HEADER.length) return false;
+  return crypto.timingSafeEqual(given, AUTH_HEADER);
 }
+
+// Sent on every response, including the static files and the error paths.
+// The CSP here carries frame-ancestors only: index.html ships its own meta CSP,
+// and two policies both apply, so anything more here would intersect with it.
+const SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'no-referrer',
+  'Content-Security-Policy': "frame-ancestors 'none'"
+};
 
 const PUBLIC_DIR_PREFIX = PUBLIC_DIR.endsWith(path.sep) ? PUBLIC_DIR : PUBLIC_DIR + path.sep;
 function serveStatic(req, res, urlPath) {
@@ -100,6 +133,7 @@ function writeData(req, res) {
 }
 
 const server = http.createServer((req, res) => {
+  for (const [name, value] of Object.entries(SECURITY_HEADERS)) res.setHeader(name, value);
   let urlPath;
   try { urlPath = decodeURIComponent(req.url.split('?')[0]); }
   catch (e) { res.writeHead(400); res.end('Bad URL'); return; }
@@ -117,7 +151,7 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, () => {
   console.log('finance-ledger homelab server listening on :' + PORT);
   console.log('data file: ' + DATA_FILE);
-  if (!AUTH_TOKEN) console.log('AUTH_TOKEN not set - anyone who can reach this port can read/write your data file.');
+  if (!AUTH_TOKEN) console.log('Running with ALLOW_NO_AUTH=1: anyone who can reach this port can read/write your data file.');
 });
 
 /* Node runs as PID 1 in the container, and PID 1 gets no default signal handlers: with

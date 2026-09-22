@@ -83,11 +83,19 @@ Dockge, where the stack directory does not contain the repo:
   probe is a bare GET, and no write is attempted unless a ledger server answered it.
 - **The server itself has no login.** It trusts whatever network it's bound to, same as most
   homelab static-file setups. Keep it on your LAN/VPN, or put it behind a reverse proxy with auth
-  (Authelia, Tailscale, a basic-auth block, etc) if it's reachable from anywhere less trusted. An
-  optional shared-secret check is built in - set `AUTH_TOKEN` in the environment and the page's
-  `fetch`/`PUT` calls would need to send it too (not currently wired into the page - add an
-  `Authorization: Bearer <token>` header in `pushToServerNow`/`loadFromServer` in `public/index.html`
-  if you turn this on).
+  (Authelia, Tailscale, a basic-auth block, etc) if it's reachable from anywhere less trusted.
+- **`AUTH_TOKEN` is required.** A shared-secret check is built in and the server now refuses to
+  start without it, logging why. Set `AUTH_TOKEN` in the environment, or set `ALLOW_NO_AUTH=1` to
+  say explicitly that you want to run without one on a network you already trust. The token is
+  compared with `crypto.timingSafeEqual` after a length check, so a wrong guess can't be narrowed
+  down by timing. The page's `fetch`/`PUT` calls need to send it too - this is not currently wired
+  into the page, so add an `Authorization: Bearer <token>` header in
+  `pushToServerNow`/`loadFromServer` in `public/index.html` if you set a token.
+- **Every response carries `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` and
+  `Content-Security-Policy: frame-ancestors 'none'`.** The header CSP deliberately carries only
+  `frame-ancestors`, which browsers ignore in a meta tag. The page's own meta CSP handles the rest,
+  and two policies both apply rather than one replacing the other, so a fuller header policy would
+  intersect with the page's and break the same-origin sync.
 - The server only ever reads/writes one fixed file (`finance-ledger-current.json`) inside
   `DATA_DIR`; incoming paths can't traverse out of it, and a PUT/POST body is rejected unless it
   parses as JSON with a `years` object, so a stray non-ledger POST can't clobber the file with
