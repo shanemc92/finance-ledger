@@ -252,7 +252,11 @@ const TAX_PRESETS = {
   2026:{ srcopSingle:44000, srcopMax:53000, lowRate:.20, highRate:.40,
     prsiRate1:.0420, prsiRate2:.0435, prsiChangeMonth:10,
     uscExempt:13000, uscBands:[{to:12012,rate:.005},{to:28700,rate:.02},{to:70044,rate:.03},{to:1e12,rate:.08}],
-    personalCredit:2000, employeeCredit:2000 }
+    personalCredit:2000, employeeCredit:2000 },
+  2027:{ srcopSingle:46500, srcopMax:55500, lowRate:.20, highRate:.40,
+    prsiRate1:.0435, prsiRate2:.0450, prsiChangeMonth:10,
+    uscExempt:13000, uscBands:[{to:12012,rate:.005},{to:30300,rate:.02},{to:70044,rate:.03},{to:1e12,rate:.08}],
+    personalCredit:2125, employeeCredit:2125 }
 };
 const presetFor = y => JSON.parse(JSON.stringify(TAX_PRESETS[y] || TAX_PRESETS[Math.max(...Object.keys(TAX_PRESETS).map(Number))]));
 
@@ -2211,7 +2215,7 @@ function renderTax(el){
       <div class="spacer"></div>
       <button class="btn" id="addPerson">+ Add person</button>
     </div>
-    <div class="note">Rates as published for ${esc(Y.year)}: 20/40% income tax, USC 0.5/2/3/8%, PRSI 4.2% rising to 4.35% from October. Edit anything above if your circumstances differ - this is an estimate, not a payslip.</div>
+    <div class="note">Rates as published for ${esc(Y.year)}: 20/40% income tax, USC 0.5/2/3/8%, PRSI rising by 0.15 points each October (4.35% to 4.5% in 2027). Edit anything above if your circumstances differ - this is an estimate, not a payslip.</div>
   </div>
   ${cards}`;
 

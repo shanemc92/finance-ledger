@@ -216,15 +216,17 @@ side and flick between them in the year dropdown. Nothing is shared between the 
 
 ## Tax figures
 
-Preloaded for 2024, 2025 and 2026 from the Budget and Revenue published rates. For 2026:
+Preloaded for 2024, 2025, 2026 and 2027 from the Budget and Revenue published rates. For 2027 (Budget 2027):
 
 | | |
 |---|---|
-| Standard rate band | 44,000 single (up to 53,000 individual cap where bands are shared) |
+| Standard rate band | 46,500 single (up to 55,500 individual cap where bands are shared) |
 | Rates | 20% / 40% |
-| USC | 0.5% to 12,012, 2% to 28,700, 3% to 70,044, 8% above. Exempt under 13,000 |
-| PRSI | 4.2%, rising to 4.35% from 1 October |
-| Credits | 2,000 personal, 2,000 employee |
+| USC | 0.5% to 12,012, 2% to 30,300, 3% to 70,044, 8% above. Exempt under 13,000 |
+| PRSI | 4.35%, rising to 4.5% from 1 October |
+| Credits | 2,125 personal, 2,125 employee |
+
+2026 for reference: band 44,000 (53,000), USC 2% to 28,700, PRSI 4.2% then 4.35%, credits 2,000 each.
 
 Every one of those is editable if your circumstances differ. To add a future year, create it and
 either edit the bands or add an entry to `TAX_PRESETS` in the source.
