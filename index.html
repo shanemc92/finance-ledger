@@ -2235,7 +2235,21 @@ function renderTax(el){
     Y.people[pi].credits.splice(ci,1); save(); render(); });
   $$('[data-del-usc]',el).forEach(x=> x.onclick=()=>{ Y.taxBands.uscBands.splice(+x.dataset.delUsc,1); save(); render(); });
   $('#addUsc').onclick = ()=>{ Y.taxBands.uscBands.push({to:1e12, rate:.08}); save(); render(); };
-  $('#resetBands').onclick = ()=>{ Y.taxBands = presetFor(Y.year); save(); render(); toast('Tax bands reset'); };
+  $('#resetBands').onclick = ()=>{
+    const p = presetFor(Y.year);
+    Y.taxBands = p;
+    // Credits and the rate band live on each person; refresh the standard ones and leave
+    // any custom credit or a hand-edited (e.g. married one-income) rate band alone.
+    const stock = new Set(Object.values(TAX_PRESETS).map(t=>t.srcopSingle));
+    Y.people.forEach(pp=>{
+      if(stock.has(num(pp.srcop))) pp.srcop = p.srcopSingle;
+      (pp.credits||[]).forEach(c=>{
+        if(/personal/i.test(c.name)) c.amount = p.personalCredit;
+        else if(/employee|paye/i.test(c.name)) c.amount = p.employeeCredit;
+      });
+    });
+    save(); render(); toast('Tax bands and credits reset');
+  };
 }
 
 /* ---------------- loans ---------------- */
