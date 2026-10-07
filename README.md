@@ -1,5 +1,10 @@
 # finance-ledger
 
+> [!NOTE]
+> **This project is archived and has been superseded by [Penny Keeper](https://github.com/shanemc92/penny-keeper).**
+> Penny Keeper is a ground-up rebuild with a friendlier interface, built-in guidance, tax figures
+> corrected against Revenue for 2022 to 2027, and a budget tracker. No further updates will be made here.
+
 **[Open the live app →](https://shanemc92.github.io/finance-ledger/)** - no download, nothing to
 install, just opens and works.
 
